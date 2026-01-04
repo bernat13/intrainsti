@@ -70,7 +70,7 @@ export class DashboardModule {
         if (!grid) return;
 
         const allModules = [
-            { key: 'calendario', title: 'Calendario', icon: 'calendar-alt', color: 'primary', link: '#/calendario', desc: 'Gestión de eventos y guardias' },
+            { key: 'calendario', title: 'Calendario', icon: 'calendar-alt', color: 'primary', link: '#/calendario', desc: 'Consulta eventos y días de libre disposición' },
             { key: 'anuncios', title: 'Anuncios', icon: 'bullhorn', color: 'info', link: '#/anuncios', desc: 'Noticias y comunicados' },
             { key: 'tickets_tic', title: 'Peticiones TIC', icon: 'laptop', color: 'warning', link: '#/tickets-tic', desc: 'Soporte técnico informático' },
             { key: 'tickets_maintenance', title: 'Peticiones Mantenimiento', icon: 'tools', color: 'danger', link: '#/tickets-mantenimiento', desc: 'Reparaciones e infraestructura' },

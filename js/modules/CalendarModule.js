@@ -1,4 +1,5 @@
 import { Calendar } from '../Calendar.js';
+import { UIHelpers } from '../UIHelpers.js';
 
 export class CalendarModule {
     constructor(container, firebaseService, user, isAdmin, userRoles) {
@@ -29,6 +30,7 @@ export class CalendarModule {
                         <ul class="mb-0 ps-3 small">
                             <li><strong>Clic Izquierdo</strong> en huecos: <span class="text-danger fw-bold">-1 Hueco</span>.</li>
                             <li><strong>Clic Derecho</strong> en huecos: <span class="text-success fw-bold">+1 Hueco</span>.</li>
+                            <li><strong>Shift + Clic</strong>: Vincular documento.</li>
                             <li><strong>Ctrl + Clic</strong> en cualquier día: Marcar/Desmarcar <span class="text-danger fw-bold">Festivo</span>.</li>
                         </ul>
                     </div>
@@ -45,6 +47,15 @@ export class CalendarModule {
                     </div>
                 </div>
             </div>
+
+            <!-- TIC Control Panel -->
+            ${this.userRoles.includes('equipo_tic') ? `
+            <div class="d-flex justify-content-end mb-3">
+                 <button id="btn-sync-drive" class="btn btn-outline-success">
+                    <i class="fab fa-google-drive me-2"></i>Sincronizar Partes de Guardia (Drive)
+                 </button>
+            </div>
+            ` : ''}
 
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <button id="prev-month-module" class="btn btn-outline-primary"><i class="fas fa-chevron-left"></i> Anterior</button>
@@ -86,10 +97,39 @@ export class CalendarModule {
             monthLabel: monthLabel,
             prevBtn: prevBtn,
             nextBtn: nextBtn
-        }, this.firebaseService, this.user, this.userRoles); // Pass roles
+        }, this.firebaseService, this.user, this.userRoles, {
+            showNavigationIcons: true
+        }); // Pass roles
 
         // Attach global function for event creation
         window.addCalendarEvent = (dateStr) => this.showAddEventModal(dateStr);
+
+        // TIC Sync Handler
+        const syncBtn = document.getElementById('btn-sync-drive');
+        if (syncBtn) {
+            syncBtn.addEventListener('click', async () => {
+                const year = this.calendar.currentYear;
+                const month = this.calendar.currentMonth;
+                const monthName = document.getElementById('current-month-year-module').textContent;
+
+                if (!confirm(`¿Sincronizar partes de guardia para ${monthName} desde Google Drive?`)) return;
+
+                const originalText = syncBtn.innerHTML;
+                syncBtn.disabled = true;
+                syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Sincronizando...';
+
+                try {
+                    const count = await this.firebaseService.syncDriveEvents(year, month);
+                    UIHelpers.showToast(`Sincronización completada. ${count} documentos vinculados.`, 'success');
+                } catch (error) {
+                    console.error(error);
+                    UIHelpers.showToast(error.message, 'error');
+                } finally {
+                    syncBtn.disabled = false;
+                    syncBtn.innerHTML = originalText;
+                }
+            });
+        }
     }
 
     showAddEventModal(dateStr) {

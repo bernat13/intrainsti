@@ -12,6 +12,7 @@ export class FirebaseService {
         this.db = getFirestore(this.app);
         this.storage = getStorage(this.app);
         this.provider = new GoogleAuthProvider();
+        this.provider.addScope('https://www.googleapis.com/auth/drive.metadata.readonly');
     }
 
     // Methods
@@ -150,15 +151,120 @@ export class FirebaseService {
      */
     subscribeToMonth(year, month, callback) {
         const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
-        const q = query(collection(this.db, "availability"), where("monthId", "==", monthStr));
+        // Ranges
+        const startOfMonth = new Date(year, month, 1);
+        const endOfMonth = new Date(year, month + 1, 0);
+        const startStr = startOfMonth.toISOString().split('T')[0];
+        const endStr = endOfMonth.toISOString().split('T')[0];
 
-        return onSnapshot(q, (querySnapshot) => {
-            const data = {};
-            querySnapshot.forEach((doc) => {
-                data[doc.id] = doc.data();
+        // State
+        let availData = {};
+        let sumCounts = {};
+        let cartCounts = {};
+        let totalActiveCarts = 0;
+
+        let initialized = { avail: false, sum: false, carts: false, inventory: false };
+
+        const mergeAndEmit = () => {
+            // Only emit if we have all streams initialized (or decent partials)
+            // To avoid flickering, let's wait for all except maybe inventory if it's slow?
+            // No, wait for all.
+            if (!initialized.avail || !initialized.sum || !initialized.carts || !initialized.inventory) return;
+
+            const merged = {};
+
+            // Helper to ensure object exists
+            const getObj = (d) => {
+                if (!merged[d]) merged[d] = {};
+                return merged[d];
+            };
+
+            // 1. Availability
+            Object.keys(availData).forEach(d => {
+                merged[d] = { ...availData[d] };
             });
-            callback(data);
+
+            // 2. SUM
+            Object.keys(sumCounts).forEach(d => {
+                const o = getObj(d);
+                o.sumCount = sumCounts[d];
+                o.hasSUM = sumCounts[d] > 0;
+            });
+
+            // 3. Carts
+            Object.keys(cartCounts).forEach(d => {
+                const o = getObj(d);
+                o.cartCount = cartCounts[d];
+                o.hasCarts = cartCounts[d] > 0;
+                o.totalActiveCarts = totalActiveCarts;
+            });
+
+            // Also inject totalActiveCarts into ALL dates just in case Calendar needs it for default rendering?
+            // Calendar.js accesses it from dayData.totalActiveCarts. 
+            // If a day has NO cart reservations, cartCounts[d] is undefined.
+            // But we still might want to know totalActiveCarts to render "0/14" if we wanted.
+            // For now, only relevant if cartCount > 0 to calc Red/Orange.
+            // BUT: if we want to show it even for 0, we need it. 
+            // Logic in Calendar: "const totalActiveCarts = dayData.totalActiveCarts || 0;"
+            // So if dayData is empty or created fresh for a day with 0 res, it will contain 0 carts. 
+            // We can just rely on the fallback.
+
+            console.log("Emitting merged data keys:", Object.keys(merged).length);
+            callback(merged);
+        };
+
+        // 0. Carts Inventory
+        getDocs(query(collection(this.db, "carts"), where("active", "==", true)))
+            .then(snap => {
+                totalActiveCarts = snap.size;
+                initialized.inventory = true;
+                mergeAndEmit();
+            })
+            .catch(err => {
+                console.error("Error fetching carts:", err);
+                initialized.inventory = true; // Proceed anyway
+                mergeAndEmit();
+            });
+
+        // 1. Availability
+        const qAvail = query(collection(this.db, "availability"), where("monthId", "==", monthStr));
+        const unsubAvail = onSnapshot(qAvail, (snap) => {
+            availData = {};
+            snap.forEach(doc => { availData[doc.id] = doc.data(); });
+            initialized.avail = true;
+            mergeAndEmit();
         });
+
+        // 2. SUM
+        const qSum = query(collection(this.db, "sum_reservations"), where("date", ">=", startStr), where("date", "<=", endStr));
+        const unsubSum = onSnapshot(qSum, (snap) => {
+            sumCounts = {};
+            snap.forEach(doc => {
+                const d = doc.data().date;
+                sumCounts[d] = (sumCounts[d] || 0) + 1;
+            });
+            console.log("SUM Counts:", sumCounts);
+            initialized.sum = true;
+            mergeAndEmit();
+        });
+
+        // 3. Carts
+        const qCarts = query(collection(this.db, "cart_reservations"), where("date", ">=", startStr), where("date", "<=", endStr));
+        const unsubCarts = onSnapshot(qCarts, (snap) => {
+            cartCounts = {};
+            snap.forEach(doc => {
+                const d = doc.data().date;
+                cartCounts[d] = (cartCounts[d] || 0) + 1;
+            });
+            initialized.carts = true;
+            mergeAndEmit();
+        });
+
+        return () => {
+            unsubAvail();
+            unsubSum();
+            unsubCarts();
+        };
     }
 
     /*
@@ -175,6 +281,27 @@ export class FirebaseService {
             date: dateStr,
             monthId: monthId
         }, { merge: true });
+    }
+
+    /*
+     * Sets the Google Drive Document ID for a specific day.
+     */
+    async setDriveLink(dateStr, driveId) {
+        const docRef = doc(this.db, "availability", dateStr);
+        const monthId = dateStr.substring(0, 7);
+        const snap = await getDoc(docRef);
+
+        const payload = {
+            driveLink: driveId,
+            date: dateStr,
+            monthId: monthId
+        };
+
+        if (!snap.exists()) {
+            payload.remainingSlots = 4;
+        }
+
+        await setDoc(docRef, payload, { merge: true });
     }
 
     /*
@@ -615,6 +742,120 @@ export class FirebaseService {
 
     async cancelSUMReservation(reservationId) {
         await deleteDoc(doc(this.db, 'sum_reservations', reservationId));
+    }
+
+    // --- Drive Sync ---
+
+    async syncDriveEvents(year, month, onProgress) {
+        // 1. Get Access Token (Trigger Popup to ensure we have fresh permission)
+        // We use the same provider which now has the scope.
+        let accessToken;
+        try {
+            const result = await signInWithPopup(this.auth, this.provider);
+            const credential = GoogleAuthProvider.credentialFromResult(result);
+            accessToken = credential.accessToken;
+        } catch (error) {
+            console.error("Error getting drive token:", error);
+            throw new Error("No se pudo obtener acceso a Drive.");
+        }
+
+        if (!accessToken) throw new Error("No access token acquired.");
+
+        // 2. Search for files
+        const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`; // e.g., 2026-02
+
+        // CHANGE: Recursive scan of target folder and subfolders.
+        const TARGET_FOLDER_ID = '1gvDXFwLrrGwQH8QMyfSUZavUNOYslVD0';
+
+        // console.log(`Iniciando escaneo recursivo desde: ${TARGET_FOLDER_ID}`);
+        //console.log(`(Filtrando por mes: ${monthStr} y patrón 'Parte de guardia')`);
+
+        let foldersToProcess = [TARGET_FOLDER_ID];
+        let allFiles = [];
+        let processedFolders = 0;
+
+        while (foldersToProcess.length > 0) {
+            const currentFolderId = foldersToProcess.shift();
+            processedFolders++;
+            // console.log(`- Escaneando carpeta ${processedFolders}: ${currentFolderId}`);
+            if (onProgress) onProgress(`Escaneando carpeta ${processedFolders}...`);
+
+            // Query: direct children of currentFolderId, not trashed.
+            const q = `'${currentFolderId}' in parents and trashed = false`;
+
+            // We need mimeType to know if it's a folder to recurse
+            const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType)&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+
+            try {
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+
+                if (!response.ok) {
+                    console.error(`Error escaneando carpeta ${currentFolderId}: ${response.statusText}`);
+                    continue;
+                }
+
+                const json = await response.json();
+                const items = json.files || [];
+
+                for (const item of items) {
+                    if (item.mimeType === 'application/vnd.google-apps.folder') {
+                        // It's a folder, add to queue
+                        //      console.log(`  -> Subcarpeta encontrada: ${item.name} (${item.id})`);
+                        foldersToProcess.push(item.id);
+                    } else {
+                        // It's a file, add to results
+                        allFiles.push(item);
+                    }
+                }
+
+            } catch (e) {
+                console.error(`Excepción escaneando carpeta ${currentFolderId}:`, e);
+            }
+
+            // Safety break 
+            if (processedFolders > 50) {
+                console.warn("Límite de carpetas escaneadas alcanzado (50). Deteniendo recursión.");
+                break;
+            }
+        }
+
+        const files = allFiles;
+        //     console.log(`Escaneo finalizado. ${processedFolders} carpetas escaneadas.`);
+        //    console.log(`Total archivos encontrados en árbol: ${files.length}.`);
+        //   console.log(`Iniciando filtrado local para: ${monthStr} ...`);
+
+        // 3. Update Firestore
+        let matchedCount = 0;
+
+        for (const file of files) {
+            // Filter in memory for "Parte" (case insensitive)
+            if (!file.name.toLowerCase().includes('parte')) {
+                continue;
+            }
+
+            // Regex to find YYYY-MM-DD at the start
+            const match = file.name.match(/^(\d{4}-\d{2}-\d{2})/);
+            if (match) {
+                const dateStr = match[1];
+
+                // CHANGE: Filter by month locally
+                if (!dateStr.startsWith(monthStr)) {
+                    //         console.log(`  -> Descartado: Fecha ${dateStr} no es de este mes (${monthStr})`);
+                    continue;
+                }
+
+                //    console.log(`  -> Coincidencia de fecha: ${dateStr}. Actualizando base de datos...`);
+                // Update availability doc
+                await this.setDriveLink(dateStr, file.id);
+                matchedCount++;
+            }
+        }
+
+        //  console.log(`Sincronización finalizada. ${matchedCount} archivos vinculados.`);
+
+        return matchedCount;
     }
 
     // --- Laptop Carts ---

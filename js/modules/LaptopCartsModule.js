@@ -1,4 +1,5 @@
 import { UIHelpers } from '../UIHelpers.js';
+import { Calendar } from '../Calendar.js';
 
 export class LaptopCartsModule {
     constructor(container, firebaseService, user, userRoles, isAdmin) {
@@ -10,6 +11,13 @@ export class LaptopCartsModule {
         this.isTic = userRoles.includes('equipo_tic') || isAdmin;
 
         this.currentDate = new Date();
+
+        // Navigation from Calendar
+        const pendingDate = localStorage.getItem('pendingDate');
+        if (pendingDate) {
+            this.currentDate = new Date(pendingDate);
+            localStorage.removeItem('pendingDate');
+        }
         this.carts = [];
         this.reservations = [];
 
@@ -50,12 +58,22 @@ export class LaptopCartsModule {
             <div class="tab-content" id="carts-tab-content">
                 <!-- Reservations Tab -->
                 <div class="tab-pane fade show active" id="tab-reservations" role="tabpanel">
-                     <div class="row mb-4">
-                        <div class="col-md-4">
-                            <label class="form-label">Seleccionar Fecha:</label>
-                            <input type="date" class="form-control" id="carts-date-picker" value="${this.formatDateForInput(this.currentDate)}">
+                     <!-- Calendar Section -->
+                    <div class="row mb-4">
+                        <div class="col-lg-6 mx-auto">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <button id="carts-prev-month" class="btn btn-outline-primary btn-sm"><i class="fas fa-chevron-left"></i></button>
+                                <h4 id="carts-month-label" class="m-0 fw-bold text-primary"></h4>
+                                <button id="carts-next-month" class="btn btn-outline-primary btn-sm"><i class="fas fa-chevron-right"></i></button>
+                            </div>
+                            <div class="card shadow-sm border-0 mb-4">
+                                <div class="card-body p-0">
+                                    <div id="carts-calendar-grid" class="calendar-grid"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
                     <div id="carts-grid-container" class="table-responsive">
                          <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
                     </div>
@@ -75,11 +93,38 @@ export class LaptopCartsModule {
             </div>
         `;
 
-        const datePicker = document.getElementById('carts-date-picker');
-        datePicker.addEventListener('change', (e) => {
-            if (e.target.value) {
-                this.currentDate = new Date(e.target.value);
+        // Initialize Calendar
+        this.calendar = new Calendar({
+            grid: document.getElementById('carts-calendar-grid'),
+            monthLabel: document.getElementById('carts-month-label'),
+            prevBtn: document.getElementById('carts-prev-month'),
+            nextBtn: document.getElementById('carts-next-month')
+        }, this.firebaseService, this.user, this.userRoles, {
+            fetchData: async (year, month) => { return {}; },
+            onDateSelect: (dateStr) => {
+                this.currentDate = new Date(dateStr);
                 this.loadReservationsView();
+            },
+            renderCell: (cell, dateStr, dayData, isWeekend) => {
+                const day = parseInt(dateStr.split('-')[2]);
+                const isSelected = this.formatDateForInput(this.currentDate) === dateStr;
+
+                const number = document.createElement('span');
+                number.className = 'day-number';
+                number.textContent = day;
+                cell.appendChild(number);
+
+                if (isWeekend) {
+                    cell.style.backgroundColor = '#f8f9fa';
+                    cell.style.color = '#adb5bd';
+                }
+
+                if (isSelected) {
+                    cell.classList.add('bg-primary', 'text-white');
+                    number.style.color = 'white';
+                } else if (!isWeekend) {
+                    cell.style.cursor = 'pointer';
+                }
             }
         });
 
@@ -98,6 +143,8 @@ export class LaptopCartsModule {
     // --- Reservations View ---
 
     async loadReservationsView() {
+        this.updateCalendarSelection();
+
         const container = document.getElementById('carts-grid-container');
         const dateStr = this.formatDateForInput(this.currentDate);
 
@@ -108,6 +155,9 @@ export class LaptopCartsModule {
         }
 
         try {
+            // Loading
+            container.innerHTML = `<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>`;
+
             // Load carts and reservations locally
             // Ideally should check cache or verify if carts list changed
             this.carts = await this.firebaseService.getCarts();
@@ -117,6 +167,11 @@ export class LaptopCartsModule {
             console.error(error);
             container.innerHTML = `<div class="alert alert-danger">Error al cargar reservas</div>`;
         }
+    }
+
+    updateCalendarSelection() {
+        if (!this.calendar || !this.calendar.grid) return;
+        this.calendar.render();
     }
 
     renderGrid(container) {
@@ -132,7 +187,7 @@ export class LaptopCartsModule {
             <table class="table table-bordered text-center align-middle">
                 <thead class="table-light">
                     <tr>
-                        <th style="width: 15%">Horario</th>
+                        <th style="width: 15%">Horario (${UIHelpers.formatDate(this.currentDate)})</th>
                         ${activeCarts.map(cart => `
                             <th>
                                 <div>${cart.name}</div>
@@ -168,7 +223,7 @@ export class LaptopCartsModule {
                 } else {
                     html += `
                         <td class="" style="cursor: pointer" onclick="window.currentCartsModule.makeReservation(${slot.index}, '${slot.label}', '${cart.id}', '${cart.name}')">
-                             <span class="text-success opacity-50"><i class="fas fa-plus-circle"></i></span>
+                            <span class="text-success opacity-50"><i class="fas fa-plus-circle"></i></span>
                         </td>
                     `;
                 }

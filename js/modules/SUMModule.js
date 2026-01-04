@@ -1,4 +1,5 @@
 import { UIHelpers } from '../UIHelpers.js';
+import { Calendar } from '../Calendar.js';
 
 export class SUMModule {
     constructor(container, firebaseService, user, userRoles, isAdmin) {
@@ -8,9 +9,19 @@ export class SUMModule {
         this.userRoles = userRoles || [];
         this.isAdmin = isAdmin;
 
+        // Global bindings moved to constructor
         window.currentSUMModule = this;
+        window.reserveSUMSlot = (idx, lbl) => this.handleReserve(idx, lbl);
+        window.cancelSUMReservation = (id) => this.handleCancel(id);
 
         this.currentDate = new Date();
+
+        // Navigation from Calendar
+        const pendingDate = localStorage.getItem('pendingDate');
+        if (pendingDate) {
+            this.currentDate = new Date(pendingDate);
+            localStorage.removeItem('pendingDate');
+        }
         this.reservations = [];
 
         // Define fixed slots
@@ -34,10 +45,19 @@ export class SUMModule {
                 <p class="text-muted">Reserva el Salón de Usos Múltiples por horas.</p>
             </div>
 
+            <!-- Calendar Section -->
             <div class="row mb-4">
-                <div class="col-md-4">
-                    <label class="form-label">Seleccionar Fecha:</label>
-                    <input type="date" class="form-control" id="sum-date-picker" value="${this.formatDateForInput(this.currentDate)}">
+                <div class="col-lg-6 mx-auto">
+                     <div class="d-flex justify-content-between align-items-center mb-3">
+                        <button id="sum-prev-month" class="btn btn-outline-primary btn-sm"><i class="fas fa-chevron-left"></i></button>
+                        <h4 id="sum-month-label" class="m-0 fw-bold text-primary"></h4>
+                        <button id="sum-next-month" class="btn btn-outline-primary btn-sm"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                    <div class="card shadow-sm border-0 mb-4">
+                        <div class="card-body p-0">
+                            <div id="sum-calendar-grid" class="calendar-grid"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -50,11 +70,48 @@ export class SUMModule {
             </div>
         `;
 
-        const datePicker = document.getElementById('sum-date-picker');
-        datePicker.addEventListener('change', (e) => {
-            if (e.target.value) {
-                this.currentDate = new Date(e.target.value);
+        // Initialize Calendar
+        this.calendar = new Calendar({
+            grid: document.getElementById('sum-calendar-grid'),
+            monthLabel: document.getElementById('sum-month-label'),
+            prevBtn: document.getElementById('sum-prev-month'),
+            nextBtn: document.getElementById('sum-next-month')
+        }, this.firebaseService, this.user, this.userRoles, {
+            // Disable default fetching, we just want navigation
+            fetchData: async (year, month) => {
+                // Determine days that have ANY reservation to maybe color them?
+                // For now, implementing as per plan: pure navigation + selection
+                // Optional: fetch all SUM reservations for month to show dots?
+                // Let's keep it simple as requested first.
+                return {};
+            },
+            onDateSelect: (dateStr) => {
+                this.currentDate = new Date(dateStr);
                 this.loadSchedule();
+            },
+            renderCell: (cell, dateStr, dayData, isWeekend) => {
+                const day = parseInt(dateStr.split('-')[2]);
+                const dateObj = new Date(dateStr);
+                const isSelected = this.formatDateForInput(this.currentDate) === dateStr;
+
+                // Number
+                const number = document.createElement('span');
+                number.className = 'day-number';
+                number.textContent = day;
+                cell.appendChild(number);
+
+                // Styling
+                if (isWeekend) {
+                    cell.style.backgroundColor = '#f8f9fa';
+                    cell.style.color = '#adb5bd';
+                }
+
+                if (isSelected) {
+                    cell.classList.add('bg-primary', 'text-white');
+                    number.style.color = 'white';
+                } else if (!isWeekend) {
+                    cell.style.cursor = 'pointer';
+                }
             }
         });
 
@@ -66,6 +123,13 @@ export class SUMModule {
     }
 
     async loadSchedule() {
+        // Update Calendar UI (highlight selected) mostly requires re-render or manual class toggle
+        // Simplest is to trigger calendar render if we want to ensure visual consistency
+        // But for performance, let's just update the previous view if needed.
+        // Actually, the Calendar.render() clears everything.
+        // We can manually toggle classes if grid exists
+        this.updateCalendarSelection();
+
         const container = document.getElementById('sum-schedule-container');
         const dateStr = this.formatDateForInput(this.currentDate);
 
@@ -76,6 +140,14 @@ export class SUMModule {
         }
 
         try {
+            // Show loading
+            container.innerHTML = `
+                <div class="card-body">
+                    <div class="d-flex justify-content-center py-5">
+                         <div class="spinner-border text-primary"></div>
+                    </div>
+                </div>`;
+
             this.reservations = await this.firebaseService.getSUMReservations(dateStr);
             this.renderSchedule(container, dateStr);
         } catch (error) {
@@ -84,9 +156,30 @@ export class SUMModule {
         }
     }
 
+    updateCalendarSelection() {
+        if (!this.calendar || !this.calendar.grid) return;
+
+        // Remove active class from all
+        const allCells = this.calendar.grid.querySelectorAll('.calendar-day');
+        allCells.forEach(cell => {
+            cell.classList.remove('bg-primary', 'text-white');
+            const num = cell.querySelector('.day-number');
+            if (num) num.style.color = '';
+        });
+
+        // Find cell for current date
+        const dateStr = this.formatDateForInput(this.currentDate);
+        // We can't easily find it without re-rendering or storing reference
+        // But hey, we provided a custom renderCell, but that runs only on month load.
+        // Let's just re-render the calendar. It's cheap.
+        this.calendar.render();
+    }
+
     renderSchedule(container, dateStr) {
         const content = `
-            <h5 class="card-title text-center mb-4">Horario para ${UIHelpers.formatDate(this.currentDate)}</h5>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="card-title m-0">Horario para ${UIHelpers.formatDate(this.currentDate)}</h5>
+            </div>
             <div class="list-group">
                 ${this.slots.map(slot => this.renderSlot(slot)).join('')}
             </div>
@@ -184,21 +277,8 @@ export class SUMModule {
     destroy() {
         delete window.reserveSUMSlot;
         delete window.cancelSUMReservation;
+        delete window.currentSUMModule;
     }
 }
 
-// Global bindings (pattern used in this project)
-// Ideally this should be bound contextually, but following project patterns
-// We will assign these in the constructor properly to this instance context? 
-// No, the render is completely re-done on date change, and "this" needs to be correct.
-// The simplest way with the current architecture is to assign a global function that delegates to the active instance?
-// Or even simpler: Define the global functions inside the logic that has access to the instance.
-
-// Let's bind it in the module when needed, but since keys are unique mostly...
-// We can attach to window but we need the instance. 
-// A dirty but effective trick in single-page simple apps:
-window.currentSUMModule = null;
-
-// Only one module alive at a time usually:
-window.reserveSUMSlot = (idx, lbl) => window.currentSUMModule?.handleReserve(idx, lbl);
-window.cancelSUMReservation = (id) => window.currentSUMModule?.handleCancel(id);
+// Global bindings managed in constructor
