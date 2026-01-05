@@ -199,9 +199,15 @@ export class Calendar {
 
     renderDefaultCell(cell, dateStr, dayData, isWeekend, day) {
         // Number
+        // Number & Weekday Label
         const number = document.createElement('span');
         number.className = 'day-number';
-        number.textContent = day;
+
+        // Calculate weekday name
+        const dateObj = new Date(dateStr);
+        const dayName = dateObj.toLocaleDateString('es-ES', { weekday: 'long' });
+
+        number.innerHTML = `${day} <span class="day-weekday-label" style="display:none;">${dayName}</span>`;
         cell.appendChild(number);
 
         if (dayData.isHoliday) {
@@ -236,77 +242,88 @@ export class Calendar {
                 iconsContainer.appendChild(driveBtn);
             }
 
-            // 2 & 3. Navigation Icons (SUM and Carts) - Always Visible if enabled
-            if (this.options.showNavigationIcons) {
+            // 2 & 3. Navigation Icons (SUM and Carts) - Always Visible if enabled, BUT hidden on weekends/holidays
+            if (this.options.showNavigationIcons && !isWeekend && !dayData.isHoliday) {
+                // Helper to check access
+                const checkAccess = (moduleKey) => {
+                    const config = this.options.moduleConfig || {};
+                    const state = config[moduleKey];
+                    if (state === 'active' || state === true || state === undefined) return true;
+                    if (state === 'testers') return (this.userRoles || []).includes('tester');
+                    return false;
+                };
+
+                const canViewSUM = checkAccess('sum');
+                const canViewCarts = checkAccess('carts');
+
                 // SUM Icon
                 // Capacity: 7 slots.
-                // Logic: 0 -> Gray, 1-6 -> Orange, 7+ -> Red.
-                const sumCount = dayData.sumCount || 0;
-                const sumCapacity = 7;
+                if (canViewSUM) {
+                    const sumCount = dayData.sumCount || 0;
+                    const sumCapacity = 7;
 
-                let sumClass = 'btn-light text-secondary border-0'; // Default (0)
-                let sumTitle = 'Reservar SUM (Libre)';
+                    let sumClass = 'btn-light text-secondary border-0'; // Default (0)
+                    let sumTitle = 'Reservar SUM (Libre)';
 
-                if (sumCount > 0) {
-                    if (sumCount >= sumCapacity) {
-                        sumClass = 'btn-danger text-white'; // Full
-                        sumTitle = 'Reservas SUM (Completo)';
-                    } else {
-                        sumClass = 'btn-warning text-dark'; // Partial
-                        sumTitle = `Reservas SUM (${sumCount}/${sumCapacity} ocupados)`;
+                    if (sumCount > 0) {
+                        if (sumCount >= sumCapacity) {
+                            sumClass = 'btn-danger text-white'; // Full
+                            sumTitle = 'Reservas SUM (Completo)';
+                        } else {
+                            sumClass = 'btn-warning text-dark'; // Partial
+                            sumTitle = `Reservas SUM (${sumCount}/${sumCapacity} ocupados)`;
+                        }
                     }
-                }
 
-                const sumBtn = document.createElement('div');
-                sumBtn.className = `btn btn-sm p-0 px-1 d-flex align-items-center justify-content-center ${sumClass}`;
-                sumBtn.style.fontSize = '0.7em';
-                sumBtn.style.width = '24px';
-                sumBtn.style.height = '24px';
-                sumBtn.innerHTML = '<i class="fas fa-chalkboard-teacher"></i>';
-                sumBtn.title = sumTitle;
-                sumBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    localStorage.setItem('pendingDate', dateStr);
-                    window.location.hash = '/reserva-sum';
-                };
-                iconsContainer.appendChild(sumBtn);
+                    const sumBtn = document.createElement('div');
+                    sumBtn.className = `btn btn-sm p-0 px-1 d-flex align-items-center justify-content-center ${sumClass}`;
+                    sumBtn.style.fontSize = '0.7em';
+                    sumBtn.style.width = '24px';
+                    sumBtn.style.height = '24px';
+                    sumBtn.innerHTML = '<i class="fas fa-chalkboard-teacher"></i>';
+                    sumBtn.title = sumTitle;
+                    sumBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        localStorage.setItem('pendingDate', dateStr);
+                        window.location.hash = '/reserva-sum';
+                    };
+                    iconsContainer.appendChild(sumBtn);
+                }
 
                 // Carts Icon
-                // Capacity: TotalCarts * 7 slots.
-                const cartCount = dayData.cartCount || 0;
-                const totalActiveCarts = dayData.totalActiveCarts || 0; // Passed from service
-                // If totalActiveCarts is 0 (not loaded or none), assume partial if count > 0?
-                // Or fallback to orange.
-                const totalCartSlots = totalActiveCarts * 7;
+                if (canViewCarts) {
+                    // Capacity: TotalCarts * 7 slots.
+                    const cartCount = dayData.cartCount || 0;
+                    const totalActiveCarts = dayData.totalActiveCarts || 0;
+                    const totalCartSlots = totalActiveCarts * 7;
 
-                let cartsClass = 'btn-light text-secondary border-0';
-                let cartsTitle = 'Reservar Carros (Libre)';
+                    let cartsClass = 'btn-light text-secondary border-0';
+                    let cartsTitle = 'Reservar Carros (Libre)';
 
-                if (cartCount > 0) {
-                    if (totalActiveCarts > 0 && cartCount >= totalCartSlots) {
-                        cartsClass = 'btn-danger text-white'; // Full
-                        cartsTitle = 'Reservas Carros (Completo)';
-                    } else {
-                        // User asked for "Orange" if partial.
-                        // Previously used 'btn-dark' (Dashboard color). Now 'btn-warning' (Orange).
-                        cartsClass = 'btn-warning text-dark';
-                        cartsTitle = `Reservas Carros (${cartCount} reservas)`;
+                    if (cartCount > 0) {
+                        if (totalActiveCarts > 0 && cartCount >= totalCartSlots) {
+                            cartsClass = 'btn-danger text-white'; // Full
+                            cartsTitle = 'Reservas Carros (Completo)';
+                        } else {
+                            cartsClass = 'btn-warning text-dark';
+                            cartsTitle = `Reservas Carros (${cartCount} reservas)`;
+                        }
                     }
-                }
 
-                const cartsBtn = document.createElement('div');
-                cartsBtn.className = `btn btn-sm p-0 px-1 d-flex align-items-center justify-content-center ${cartsClass}`;
-                cartsBtn.style.fontSize = '0.7em';
-                cartsBtn.style.width = '24px';
-                cartsBtn.style.height = '24px';
-                cartsBtn.innerHTML = '<i class="fas fa-laptop"></i>';
-                cartsBtn.title = cartsTitle;
-                cartsBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    localStorage.setItem('pendingDate', dateStr);
-                    window.location.hash = '/reserva-carros';
-                };
-                iconsContainer.appendChild(cartsBtn);
+                    const cartsBtn = document.createElement('div');
+                    cartsBtn.className = `btn btn-sm p-0 px-1 d-flex align-items-center justify-content-center ${cartsClass}`;
+                    cartsBtn.style.fontSize = '0.7em';
+                    cartsBtn.style.width = '24px';
+                    cartsBtn.style.height = '24px';
+                    cartsBtn.innerHTML = '<i class="fas fa-laptop"></i>';
+                    cartsBtn.title = cartsTitle;
+                    cartsBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        localStorage.setItem('pendingDate', dateStr);
+                        window.location.hash = '/reserva-carros';
+                    };
+                    iconsContainer.appendChild(cartsBtn);
+                }
             }
 
             if (iconsContainer.hasChildNodes()) {

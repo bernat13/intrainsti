@@ -2,12 +2,13 @@ import { Calendar } from '../Calendar.js';
 import { UIHelpers } from '../UIHelpers.js';
 
 export class CalendarModule {
-    constructor(container, firebaseService, user, isAdmin, userRoles) {
+    constructor(container, firebaseService, user, isAdmin, userRoles, moduleConfig) {
         this.container = container;
         this.firebaseService = firebaseService;
         this.user = user;
         this.isAdmin = isAdmin;
         this.userRoles = userRoles || [];
+        this.moduleConfig = moduleConfig || {};
         this.canEditSlots = this.userRoles.includes('director');
         this.canAddEvents = this.userRoles.includes('equipo_directivo');
 
@@ -98,7 +99,8 @@ export class CalendarModule {
             prevBtn: prevBtn,
             nextBtn: nextBtn
         }, this.firebaseService, this.user, this.userRoles, {
-            showNavigationIcons: true
+            showNavigationIcons: true,
+            moduleConfig: this.moduleConfig // Pass config for visibility checks
         }); // Pass roles
 
         // Attach global function for event creation

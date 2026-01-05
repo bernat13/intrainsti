@@ -239,9 +239,38 @@ main {
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .sidebar {
-        position: relative;
+        position: fixed;
+        top: 70px;
+        /* Navbar height */
+        left: 0;
+        height: calc(100vh - 70px);
+        width: 250px;
+        z-index: 1000;
+        transform: translateX(-100%);
+        /* Hide by default */
+        transition: transform 0.3s ease-in-out;
+        border-right: 1px solid #dee2e6;
+    }
+
+    .sidebar.show {
+        transform: translateX(0);
+        /* Show when active */
+    }
+
+    /* Overlay backing */
+    .sidebar-overlay {
+        display: none;
+        position: fixed;
         top: 0;
-        height: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+    }
+
+    .sidebar-overlay.show {
+        display: block;
     }
 
     .toast-notification {

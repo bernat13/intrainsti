@@ -98,35 +98,61 @@ body {
 }
 
 /* Responsive adjustments */
+/* Responsive adjustments */
 @media (max-width: 768px) {
+    /* Calendar Grid -> List View */
+    .calendar-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        background-color: transparent; /* Remove grid background */
+    }
+
+    /* Hide Grid Headers (Mon, Tue...) */
+    .calendar-header {
+        display: none;
+    }
+
+    /* Day Cell adjustments */
     .calendar-day {
-        min-height: 60px;
-        /* Reduced to fit better */
-        padding: 2px;
+        min-height: auto; /* Dynamic height */
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+    }
+
+    /* Empty days (padding from other months) - Hide them to clean up list */
+    .calendar-day.empty {
+        display: none;
     }
 
     .day-number {
-        font-size: 0.8rem;
-        margin-bottom: 2px;
+        font-size: 1.1rem; /* Restore readable size */
+        margin-bottom: 5px;
+        display: flex; /* Allow inline weekday label */
+        align-items: center;
+        justify-content: space-between;
     }
 
+    /* Weekday Label (Injected by JS) */
+    .day-weekday-label {
+        display: inline-block !important; /* Force show on mobile */
+        font-size: 0.9rem;
+        font-weight: normal;
+        color: #6c757d;
+        text-transform: uppercase;
+    }
+
+    /* Slot Badge - Inline on mobile line 1? or separate? */
     .slot-badge {
-        font-size: 0.7rem;
-        padding: 1px 4px;
-        white-space: nowrap;
-        /* Prevent breaking */
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 100%;
-        display: block;
-        /* Stack if needed */
-        margin: 0 auto;
-    }
-
-    /* Ensure header cells are small enough */
-    .calendar-header {
-        padding: 5px 2px;
-        font-size: 0.8rem;
+        font-size: 0.85rem;
+        padding: 4px 10px;
+        margin-top: 5px;
+        margin-bottom: 10px;
+        display: inline-block;
+        width: auto;
     }
 }
 

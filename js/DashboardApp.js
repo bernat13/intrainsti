@@ -61,7 +61,11 @@ class DashboardApp {
     setupUI() {
         // Update user display name
         const displayName = this.user.displayName || this.user.email.split('@')[0];
-        document.getElementById('user-display-name').textContent = displayName;
+        const nameEl = document.getElementById('user-display-name');
+        if (nameEl) nameEl.textContent = displayName;
+
+        const desktopNameEl = document.getElementById('user-display-name-desktop');
+        if (desktopNameEl) desktopNameEl.textContent = displayName;
 
         // Show admin menu if admin
         if (this.isAdmin) {
@@ -159,7 +163,7 @@ class DashboardApp {
         });
 
         this.router.register('/calendario', () => {
-            return checkAccess('calendario', () => new CalendarModule(mainContent, this.firebaseService, this.user, this.isAdmin, this.userRoles));
+            return checkAccess('calendario', () => new CalendarModule(mainContent, this.firebaseService, this.user, this.isAdmin, this.userRoles, this.moduleConfig));
         });
 
         this.router.register('/anuncios', () => {
@@ -212,6 +216,43 @@ class DashboardApp {
         document.getElementById('logout-btn').addEventListener('click', () => {
             this.firebaseService.logout();
             window.location.href = 'index.html';
+        });
+
+        // Sidebar Toggles
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        const toggleBtn = document.getElementById('sidebar-toggle');
+
+        const closeSidebar = () => {
+            if (sidebar) sidebar.classList.remove('show');
+            if (overlay) overlay.classList.remove('show');
+        };
+
+        const openSidebar = () => {
+            if (sidebar) sidebar.classList.add('show');
+            if (overlay) overlay.classList.add('show');
+        };
+
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (sidebar && sidebar.classList.contains('show')) {
+                    closeSidebar();
+                } else {
+                    openSidebar();
+                }
+            });
+        }
+
+        if (overlay) {
+            overlay.addEventListener('click', closeSidebar);
+        }
+
+        // Auto-close on navigation (mobile)
+        window.addEventListener('hashchange', () => {
+            if (window.innerWidth < 768) {
+                closeSidebar();
+            }
         });
     }
 }
