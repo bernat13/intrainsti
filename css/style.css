@@ -97,15 +97,32 @@ body {
     color: #6c757d;
 }
 
+/* Compact Calendar for selection ONLY */
+.calendar-compact .calendar-day {
+    min-height: 40px !important;
+    /* Much shorter */
+    padding: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.calendar-compact .day-number {
+    margin-bottom: 0;
+    font-size: 1rem;
+}
+
 /* Responsive adjustments */
 /* Responsive adjustments */
 @media (max-width: 768px) {
+
     /* Calendar Grid -> List View */
     .calendar-grid {
         display: flex;
         flex-direction: column;
         gap: 15px;
-        background-color: transparent; /* Remove grid background */
+        background-color: transparent;
+        /* Remove grid background */
     }
 
     /* Hide Grid Headers (Mon, Tue...) */
@@ -115,10 +132,11 @@ body {
 
     /* Day Cell adjustments */
     .calendar-day {
-        min-height: auto; /* Dynamic height */
+        min-height: auto;
+        /* Dynamic height */
         padding: 15px;
         border-radius: 8px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
         background-color: #fff;
         border: 1px solid #dee2e6;
     }
@@ -129,16 +147,19 @@ body {
     }
 
     .day-number {
-        font-size: 1.1rem; /* Restore readable size */
+        font-size: 1.1rem;
+        /* Restore readable size */
         margin-bottom: 5px;
-        display: flex; /* Allow inline weekday label */
+        display: flex;
+        /* Allow inline weekday label */
         align-items: center;
         justify-content: space-between;
     }
 
     /* Weekday Label (Injected by JS) */
     .day-weekday-label {
-        display: inline-block !important; /* Force show on mobile */
+        display: inline-block !important;
+        /* Force show on mobile */
         font-size: 0.9rem;
         font-weight: normal;
         color: #6c757d;

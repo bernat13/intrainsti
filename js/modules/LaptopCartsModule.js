@@ -58,9 +58,9 @@ export class LaptopCartsModule {
             <div class="tab-content" id="carts-tab-content">
                 <!-- Reservations Tab -->
                 <div class="tab-pane fade show active" id="tab-reservations" role="tabpanel">
-                     <!-- Calendar Section -->
+                    <!-- Calendar Section -->
                     <div class="row mb-4">
-                        <div class="col-lg-6 mx-auto">
+                        <div class="col-lg-12">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <button id="carts-prev-month" class="btn btn-outline-primary btn-sm"><i class="fas fa-chevron-left"></i></button>
                                 <h4 id="carts-month-label" class="m-0 fw-bold text-primary"></h4>
@@ -68,7 +68,7 @@ export class LaptopCartsModule {
                             </div>
                             <div class="card shadow-sm border-0 mb-4">
                                 <div class="card-body p-0">
-                                    <div id="carts-calendar-grid" class="calendar-grid"></div>
+                                    <div id="carts-calendar-grid" class="calendar-grid calendar-compact"></div>
                                 </div>
                             </div>
                         </div>
@@ -100,7 +100,9 @@ export class LaptopCartsModule {
             prevBtn: document.getElementById('carts-prev-month'),
             nextBtn: document.getElementById('carts-next-month')
         }, this.firebaseService, this.user, this.userRoles, {
-            fetchData: async (year, month) => { return {}; },
+            fetchData: async (year, month) => {
+                return await this.firebaseService.getMonthAvailability(year, month);
+            },
             onDateSelect: (dateStr) => {
                 this.currentDate = new Date(dateStr);
                 this.loadReservationsView();
@@ -114,15 +116,16 @@ export class LaptopCartsModule {
                 number.textContent = day;
                 cell.appendChild(number);
 
-                if (isWeekend) {
-                    cell.style.backgroundColor = '#f8f9fa';
-                    cell.style.color = '#adb5bd';
+                if (isWeekend || (dayData && dayData.isHoliday)) {
+                    cell.classList.add('day-red');
+                    if (dayData && dayData.isHoliday) cell.title = "Festivo";
                 }
 
                 if (isSelected) {
+                    cell.classList.remove('day-red');
                     cell.classList.add('bg-primary', 'text-white');
                     number.style.color = 'white';
-                } else if (!isWeekend) {
+                } else if (!isWeekend && !(dayData && dayData.isHoliday)) {
                     cell.style.cursor = 'pointer';
                 }
             }
@@ -161,6 +164,7 @@ export class LaptopCartsModule {
             // Load carts and reservations locally
             // Ideally should check cache or verify if carts list changed
             this.carts = await this.firebaseService.getCarts();
+            this.carts.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
             this.reservations = await this.firebaseService.getCartReservations(dateStr);
             this.renderGrid(container);
         } catch (error) {
@@ -275,6 +279,7 @@ export class LaptopCartsModule {
         const container = document.getElementById('carts-list-container');
         try {
             this.carts = await this.firebaseService.getCarts();
+            this.carts.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
             if (this.carts.length === 0) {
                 container.innerHTML = '<p class="text-muted text-center">No hay carros registrados.</p>';

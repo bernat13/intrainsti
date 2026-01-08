@@ -146,6 +146,18 @@ export class FirebaseService {
     }
 
     /* 
+     * Fetches availability for a specific month once (no subscription).
+     */
+    async getMonthAvailability(year, month) {
+        const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+        const q = query(collection(this.db, "availability"), where("monthId", "==", monthStr));
+        const snap = await getDocs(q);
+        const data = {};
+        snap.forEach(doc => { data[doc.id] = doc.data(); });
+        return data;
+    }
+
+    /* 
      * Subscribes to availability changes for a specific month.
      * callback(data) will be called with an object mapping "YYYY-MM-DD" -> { slots, isHoliday, ... }
      */

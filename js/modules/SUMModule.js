@@ -47,7 +47,7 @@ export class SUMModule {
 
             <!-- Calendar Section -->
             <div class="row mb-4">
-                <div class="col-lg-6 mx-auto">
+                <div class="col-lg-12">
                      <div class="d-flex justify-content-between align-items-center mb-3">
                         <button id="sum-prev-month" class="btn btn-outline-primary btn-sm"><i class="fas fa-chevron-left"></i></button>
                         <h4 id="sum-month-label" class="m-0 fw-bold text-primary"></h4>
@@ -55,7 +55,7 @@ export class SUMModule {
                     </div>
                     <div class="card shadow-sm border-0 mb-4">
                         <div class="card-body p-0">
-                            <div id="sum-calendar-grid" class="calendar-grid"></div>
+                            <div id="sum-calendar-grid" class="calendar-grid calendar-compact"></div>
                         </div>
                     </div>
                 </div>
@@ -79,11 +79,7 @@ export class SUMModule {
         }, this.firebaseService, this.user, this.userRoles, {
             // Disable default fetching, we just want navigation
             fetchData: async (year, month) => {
-                // Determine days that have ANY reservation to maybe color them?
-                // For now, implementing as per plan: pure navigation + selection
-                // Optional: fetch all SUM reservations for month to show dots?
-                // Let's keep it simple as requested first.
-                return {};
+                return await this.firebaseService.getMonthAvailability(year, month);
             },
             onDateSelect: (dateStr) => {
                 this.currentDate = new Date(dateStr);
@@ -91,25 +87,24 @@ export class SUMModule {
             },
             renderCell: (cell, dateStr, dayData, isWeekend) => {
                 const day = parseInt(dateStr.split('-')[2]);
-                const dateObj = new Date(dateStr);
                 const isSelected = this.formatDateForInput(this.currentDate) === dateStr;
 
-                // Number
                 const number = document.createElement('span');
                 number.className = 'day-number';
                 number.textContent = day;
                 cell.appendChild(number);
 
                 // Styling
-                if (isWeekend) {
-                    cell.style.backgroundColor = '#f8f9fa';
-                    cell.style.color = '#adb5bd';
+                if (isWeekend || (dayData && dayData.isHoliday)) {
+                    cell.classList.add('day-red');
+                    if (dayData && dayData.isHoliday) cell.title = "Festivo";
                 }
 
                 if (isSelected) {
+                    cell.classList.remove('day-red');
                     cell.classList.add('bg-primary', 'text-white');
                     number.style.color = 'white';
-                } else if (!isWeekend) {
+                } else if (!isWeekend && !(dayData && dayData.isHoliday)) {
                     cell.style.cursor = 'pointer';
                 }
             }
