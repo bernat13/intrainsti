@@ -66,16 +66,20 @@ service cloud.firestore {
 
     // Tickets TIC
     match /tickets_tic/{ticketId} {
-      // Ver: Dueño, Admin, Equipo TIC, Jefe Dept (si es de su dept)
-      allow read: if isAuthenticated() && (
-        resource.data.requestedBy == request.auth.uid || 
-        isAdmin() || 
-        hasRole('equipo_tic') ||
-        (hasRole('jefe_departamento') && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.department == resource.data.department)
-      );
+      // Ver: Todos los autenticados (Visibilidad Global)
+      allow read: if isAuthenticated();
       
       // Crear: Todos
       allow create: if isAuthenticated();
+      
+      // Borrar: Dueño si estatus es abierto y no asignado
+      allow delete: if isAuthenticated() && (
+        isAdmin() || 
+        (resource.data.requestedBy == request.auth.uid && 
+         resource.data.status == 'abierto' && 
+         (!('assignedTo' in resource.data) || resource.data.assignedTo == null || resource.data.assignedTo == "")
+        )
+      );
       
       // Actualizar: Equipo TIC, Admin, Dueño (solo algunos campos)
       allow update: if isAuthenticated() && (
@@ -87,15 +91,19 @@ service cloud.firestore {
 
     // Tickets Mantenimiento
     match /tickets_maintenance/{ticketId} {
-      // Ver: Dueño, Admin, Equipo Mantenimiento, Jefe Dept (si es de su dept)
-      allow read: if isAuthenticated() && (
-        resource.data.requestedBy == request.auth.uid || 
-        isAdmin() || 
-        hasRole('equipo_mantenimiento') ||
-        (hasRole('jefe_departamento') && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.department == resource.data.department)
-      );
+      // Ver: Todos los autenticados (Visibilidad Global)
+      allow read: if isAuthenticated();
       
       allow create: if isAuthenticated();
+      
+      // Borrar: Dueño si estatus es abierto/pendiente y no asignado
+      allow delete: if isAuthenticated() && (
+        isAdmin() || 
+        (resource.data.requestedBy == request.auth.uid && 
+         (resource.data.status == 'abierto' || resource.data.status == 'pendiente_validacion') && 
+         (!('assignedTo' in resource.data) || resource.data.assignedTo == null || resource.data.assignedTo == "")
+        )
+      );
       
       allow update: if isAuthenticated() && (
         isAdmin() || 
@@ -114,15 +122,19 @@ service cloud.firestore {
 
     // Tickets 3D
     match /tickets_3d/{ticketId} {
-      // Ver: Dueño, Admin, Equipo 3D, Jefe Dept (si es de su dept)
-      allow read: if isAuthenticated() && (
-        resource.data.requestedBy == request.auth.uid || 
-        isAdmin() || 
-        hasRole('equipo_3d') ||
-        (hasRole('jefe_departamento') && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.department == resource.data.department)
-      );
+      // Ver: Todos los autenticados (Visibilidad Global)
+      allow read: if isAuthenticated();
       
       allow create: if isAuthenticated();
+      
+      // Borrar: Dueño si estatus es abierto y no asignado
+      allow delete: if isAuthenticated() && (
+        isAdmin() || 
+        (resource.data.requestedBy == request.auth.uid && 
+         resource.data.status == 'abierto' && 
+         (!('assignedTo' in resource.data) || resource.data.assignedTo == null || resource.data.assignedTo == "")
+        )
+      );
       
       allow update: if isAuthenticated() && (
         isAdmin() || 

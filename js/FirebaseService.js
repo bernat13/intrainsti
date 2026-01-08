@@ -546,7 +546,14 @@ export class FirebaseService {
             status: type === 'maintenance' ? 'pendiente_validacion' : 'abierto',
             assignedTo: null,
             resolvedAt: null,
-            resolutionTime: null
+            resolutionTime: null,
+            history: [{
+                timestamp: new Date(),
+                type: 'creation',
+                userId: userUid,
+                userName: userName,
+                content: 'Petición creada'
+            }]
         };
 
         if (type === 'tic') {
@@ -580,26 +587,15 @@ export class FirebaseService {
         const isDeptHead = userRoles.includes('jefe_departamento');
         const isAdmin = await this.getUserRole(userUid); // Helpers usually cache or we trust the caller partially, but for data fetching let's trust roles param for logic branching, but Rules will enforce security.
 
-        // Admin, Director, or Specific Team can view ALL
-        const canViewAll = isAdmin || (type === 'tic' && isTicTeam) || (type === 'maintenance' && isMntTeam) || (type === '3d' && is3DTeam) || (type === 'maintenance' && isDirector);
+        // Admin, Director, or Specific Team can view ALL - NOW EVERYONE VISIBLE PROPOSAL
+        // "todo el mundo, pueda ver todas las peticiones"
+        const canViewAll = true;
 
         let querySnapshots = [];
 
         if (canViewAll) {
             // Fetch All
             const q = query(collection(this.db, collection_name));
-            querySnapshots.push(await getDocs(q));
-        } else if (isDeptHead && userDepartment) {
-            // Fetch Own + Department
-            // Firestore OR is tricky, so we do parallel queries
-            const q1 = query(collection(this.db, collection_name), where('requestedBy', '==', userUid));
-            const q2 = query(collection(this.db, collection_name), where('requestedByDepartment', '==', userDepartment));
-
-            const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-            querySnapshots.push(snap1, snap2);
-        } else {
-            // Fetch Own only
-            const q = query(collection(this.db, collection_name), where('requestedBy', '==', userUid));
             querySnapshots.push(await getDocs(q));
         }
 
@@ -643,7 +639,32 @@ export class FirebaseService {
             }
         }
 
+        // Handle History
+        if (data.newHistoryEntries) {
+            data.history = arrayUnion(...data.newHistoryEntries);
+            delete data.newHistoryEntries;
+        } else if (data.newHistoryEntry) { // Backwards compat or single entry convenience
+            data.history = arrayUnion(data.newHistoryEntry);
+            delete data.newHistoryEntry;
+        }
+
         await updateDoc(ticketRef, data);
+    }
+
+    async deleteTicket(type, ticketId) {
+        let collection_name;
+        if (type === 'tic') collection_name = 'tickets_tic';
+        else if (type === 'maintenance') collection_name = 'tickets_maintenance';
+        else if (type === '3d') collection_name = 'tickets_3d';
+        else throw new Error('Tipo de ticket inválido');
+
+        try {
+            await deleteDoc(doc(this.db, collection_name, ticketId));
+            return { success: true };
+        } catch (error) {
+            console.error("Error deleting ticket: ", error);
+            throw error;
+        }
     }
 
     async getTicketStats(type, filters = {}) {

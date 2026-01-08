@@ -15,7 +15,6 @@ export class TicketsTicModule {
         window.viewTicketTic = async (ticketId) => {
             const ticket = this.tickets ? this.tickets.find(t => t.id === ticketId) : null;
             if (!ticket) {
-                // If not found in memory (e.g. after refresh), fetching might be needed but currently we rely on list being loaded
                 UIHelpers.showToast('Error: Incidencia no encontrada', 'error');
                 return;
             }
@@ -23,13 +22,49 @@ export class TicketsTicModule {
             const isTicTeam = this.canManage;
             const users = await this.firebaseService.getAllUsers();
 
+            // Filter users for assignment (only equipo_tic)
+            const ticUsers = users.filter(u => u.roles && u.roles.includes('equipo_tic'));
+
             // Build assignee options
-            const assigneeOptions = users.map(u =>
+            const assigneeOptions = ticUsers.map(u =>
                 `<option value="${u.uid}" ${ticket.assignedTo === u.uid ? 'selected' : ''}>${u.displayName || u.email}</option>`
             ).join('');
 
             const modal = document.createElement('div');
             modal.className = 'modal fade';
+
+            // Generate History HTML
+            const renderHistory = (history) => {
+                if (!history || history.length === 0) return '<div class="text-muted small">Sin historial</div>';
+
+                return history.sort((a, b) => (b.timestamp?.seconds || b.timestamp) - (a.timestamp?.seconds || a.timestamp)).map(h => {
+                    const date = h.timestamp instanceof Date ? h.timestamp : (h.timestamp.toDate ? h.timestamp.toDate() : new Date(h.timestamp));
+                    let icon = 'circle';
+                    let color = 'secondary';
+
+                    if (h.type === 'creation') { icon = 'plus-circle'; color = 'primary'; }
+                    if (h.type === 'status') { icon = 'exchange-alt'; color = 'info'; }
+                    if (h.type === 'comment') { icon = 'comment'; color = 'warning'; }
+                    if (h.type === 'assignment') { icon = 'user-check'; color = 'success'; }
+
+                    return `
+                        <div class="d-flex mb-3">
+                            <div class="me-3">
+                                <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                    <i class="fas fa-${icon} text-${color}"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="small text-muted mb-1">
+                                    <span class="fw-bold text-dark">${h.userName || 'Usuario'}</span> • ${UIHelpers.formatDate(date)} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                                <div>${h.content}</div>
+                            </div>
+                        </div>
+                     `;
+                }).join('');
+            };
+
             modal.innerHTML = `
                 <div class="modal-dialog modal-lg">
                     <div class="modal-content">
@@ -42,20 +77,29 @@ export class TicketsTicModule {
                         <div class="modal-body">
                             <div class="row">
                                 <div class="col-md-8">
-                                    <div class="mb-3">
-                                        <label class="form-label text-muted small">Descripción</label>
-                                        <div class="p-3 bg-light rounded">${ticket.description}</div>
+                                    <div class="mb-4">
+                                        <label class="form-label text-muted small fw-bold text-uppercase">Descripción Original</label>
+                                        <div class="p-3 bg-light rounded border">${ticket.description}</div>
                                     </div>
                                     
-                                    ${isTicTeam ? `
-                                        <div class="mb-3">
-                                            <label class="form-label fw-bold">Observaciones / Comentarios</label>
-                                            <textarea class="form-control" id="ticket-comments" rows="3">${ticket.comments || ''}</textarea>
+                                    ${ticket.comments ? `
+                                        <div class="mb-4">
+                                            <label class="form-label text-muted small fw-bold text-uppercase">Notas Anteriores (Legacy)</label>
+                                            <div class="p-3 bg-white border rounded text-secondary fst-italic">${ticket.comments}</div>
                                         </div>
-                                    ` : ticket.comments ? `
-                                        <div class="mb-3">
-                                            <label class="form-label text-muted small">Observaciones</label>
-                                            <div class="p-2 border rounded bg-white">${ticket.comments}</div>
+                                    ` : ''}
+
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold"><i class="fas fa-history me-2"></i>Historial de Actividad</label>
+                                        <div class="p-3 bg-white border rounded" style="max-height: 400px; overflow-y: auto;">
+                                            ${renderHistory(ticket.history)}
+                                        </div>
+                                    </div>
+
+                                    ${isTicTeam || ticket.status !== 'cerrado' ? `
+                                        <div class="mt-4">
+                                            <label class="form-label fw-bold">Nueva Observación</label>
+                                            <textarea class="form-control" id="ticket-new-observation" rows="2" placeholder="Escribe una observación..."></textarea>
                                         </div>
                                     ` : ''}
                                 </div>
@@ -128,7 +172,7 @@ export class TicketsTicModule {
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                            ${isTicTeam ? '<button type="button" class="btn btn-primary" id="btn-update-ticket">Guardar Cambios</button>' : ''}
+                            ${isTicTeam || ticket.status !== 'cerrado' ? '<button type="button" class="btn btn-primary" id="btn-update-ticket">Guardar Cambios</button>' : ''}
                         </div>
                     </div>
                 </div>
@@ -138,29 +182,90 @@ export class TicketsTicModule {
             const bsModal = new bootstrap.Modal(modal);
             bsModal.show();
 
+            const btnDelete = document.getElementById('btn-delete-ticket');
+            if (btnDelete) {
+                btnDelete.addEventListener('click', async () => {
+                    if (confirm('¿Estás seguro de que deseas eliminar esta petición?')) {
+                        try {
+                            await this.firebaseService.deleteTicket('tic', ticketId);
+                            UIHelpers.showToast('Petición eliminada', 'success');
+                            bsModal.hide();
+                            await this.loadTicketsList();
+                        } catch (error) {
+                            console.error('Error deleting ticket:', error);
+                            UIHelpers.showToast('Error al eliminar la petición', 'error');
+                        }
+                    }
+                });
+            }
+
             const btnUpdate = document.getElementById('btn-update-ticket');
             if (btnUpdate) {
                 btnUpdate.addEventListener('click', async () => {
-                    const status = document.getElementById('ticket-status').value;
-                    const comments = document.getElementById('ticket-comments').value;
-                    const assignedTo = document.getElementById('ticket-assigned').value;
-                    const resolutionTime = parseInt(document.getElementById('ticket-time').value) || 0;
-                    const totalCost = parseFloat(document.getElementById('ticket-cost').value) || 0;
-
                     try {
-                        await this.firebaseService.updateTicket('tic', ticketId, {
-                            status,
-                            comments,
-                            assignedTo,
-                            resolutionTime,
-                            totalCost,
+                        let newHistoryEntries = [];
+                        const updates = {
                             updatedAt: new Date(),
                             updatedBy: this.user.uid
-                        });
+                        };
 
-                        UIHelpers.showToast('Petición actualizada', 'success');
-                        bsModal.hide();
-                        await this.loadTicketsList();
+                        // Check for new observation
+                        const newObservation = document.getElementById('ticket-new-observation') ? document.getElementById('ticket-new-observation').value.trim() : null;
+                        if (newObservation) {
+                            newHistoryEntries.push({
+                                timestamp: new Date(),
+                                type: 'comment',
+                                userId: this.user.uid,
+                                userName: this.user.displayName || this.user.email,
+                                content: newObservation
+                            });
+                        }
+
+                        if (isTicTeam) {
+                            const newStatus = document.getElementById('ticket-status').value;
+                            if (newStatus !== ticket.status) {
+                                updates.status = newStatus;
+                                newHistoryEntries.push({
+                                    timestamp: new Date(),
+                                    type: 'status',
+                                    userId: this.user.uid,
+                                    userName: this.user.displayName || this.user.email,
+                                    content: `Estado cambiado de ${ticket.status} a ${newStatus}`
+                                });
+                            }
+
+                            const newAssignedTo = document.getElementById('ticket-assigned').value;
+                            if (newAssignedTo !== ticket.assignedTo) {
+                                updates.assignedTo = newAssignedTo;
+                                const newUser = users.find(u => u.uid === newAssignedTo);
+                                const newUserName = newUser ? (newUser.displayName || newUser.email) : 'Sin asignar';
+                                newHistoryEntries.push({
+                                    timestamp: new Date(),
+                                    type: 'assignment',
+                                    userId: this.user.uid,
+                                    userName: this.user.displayName || this.user.email,
+                                    content: `Asignado a ${newUserName}`
+                                });
+                            }
+
+                            updates.resolutionTime = parseInt(document.getElementById('ticket-time').value) || 0;
+                            updates.totalCost = parseFloat(document.getElementById('ticket-cost').value) || 0;
+                        }
+
+                        if (Object.keys(updates).length > 2 || newHistoryEntries.length > 0) { // >2 because updatedAt/updatedBy are always there
+                            if (newHistoryEntries.length > 0) {
+                                updates.newHistoryEntries = newHistoryEntries;
+                            }
+
+                            await this.firebaseService.updateTicket('tic', ticketId, updates);
+
+                            UIHelpers.showToast('Petición actualizada', 'success');
+                            bsModal.hide();
+                            await this.loadTicketsList();
+                        } else {
+                            bsModal.hide(); // No changes
+                        }
+
                     } catch (error) {
                         console.error('Error updating ticket:', error);
                         UIHelpers.showToast('Error al actualizar', 'error');
@@ -247,33 +352,41 @@ export class TicketsTicModule {
             const resolvedTickets = tickets.filter(t => t.status === 'resuelto' || t.status === 'cerrado');
 
             container.innerHTML = `
-                <ul class="nav nav-tabs mb-3" role="tablist">
-                    <li class="nav-item">
-                        <a class="nav-link active" data-bs-toggle="tab" href="#tab-open">
-                            Abiertas <span class="badge bg-danger">${openTickets.length}</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" data-bs-toggle="tab" href="#tab-progress">
-                            En Progreso <span class="badge bg-warning">${inProgressTickets.length}</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" data-bs-toggle="tab" href="#tab-resolved">
-                            Resueltas <span class="badge bg-success">${resolvedTickets.length}</span>
-                        </a>
-                    </li>
-                </ul>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="card h-100 border-0 bg-light">
+                            <div class="card-header bg-danger text-white fw-bold d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-exclamation-circle me-2"></i>Pendientes</span>
+                                <span class="badge bg-white text-danger rounded-pill">${openTickets.length}</span>
+                            </div>
+                            <div class="card-body p-2" style="max-height: 70vh; overflow-y: auto;">
+                                ${this.renderTicketsList(openTickets)}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card h-100 border-0 bg-light">
+                            <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-spinner me-2"></i>En Progreso</span>
+                                <span class="badge bg-white text-dark rounded-pill">${inProgressTickets.length}</span>
+                            </div>
+                            <div class="card-body p-2" style="max-height: 70vh; overflow-y: auto;">
+                                ${this.renderTicketsList(inProgressTickets)}
+                            </div>
+                        </div>
+                    </div>
 
-                <div class="tab-content">
-                    <div class="tab-pane fade show active" id="tab-open">
-                        ${this.renderTicketsList(openTickets)}
-                    </div>
-                    <div class="tab-pane fade" id="tab-progress">
-                        ${this.renderTicketsList(inProgressTickets)}
-                    </div>
-                    <div class="tab-pane fade" id="tab-resolved">
-                        ${this.renderTicketsList(resolvedTickets)}
+                    <div class="col-md-4">
+                        <div class="card h-100 border-0 bg-light">
+                            <div class="card-header bg-success text-white fw-bold d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-check-circle me-2"></i>Finalizadas</span>
+                                <span class="badge bg-white text-success rounded-pill">${resolvedTickets.length}</span>
+                            </div>
+                            <div class="card-body p-2" style="max-height: 70vh; overflow-y: auto;">
+                                ${this.renderTicketsList(resolvedTickets)}
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -291,8 +404,16 @@ export class TicketsTicModule {
 
         return `
             <div class="list-group">
-                ${tickets.map(ticket => `
-                    <div class="list-group-item ticket-item priority-${ticket.priority}" onclick="window.viewTicketTic('${ticket.id}')">
+                ${tickets.map(ticket => {
+            const isOwner = ticket.requestedBy === this.user.uid;
+            const canEdit = this.canManage; // Team member
+            const canView = isOwner || canEdit;
+            // "Las tareas de los otros usuarios para los que no sean del equipo, se deben ver en gris y sin poder clicarlas"
+            const isDisabled = !canView;
+
+            return `
+                    <div class="list-group-item ticket-item priority-${ticket.priority} ${isDisabled ? 'bg-light text-muted opacity-75' : ''}" 
+                        ${isDisabled ? 'style="pointer-events: none; cursor: default;"' : `onclick="window.viewTicketTic('${ticket.id}')"`}>
                         <div class="d-flex justify-content-between align-items-start">
                             <div class="flex-grow-1">
                                 <div class="d-flex align-items-center mb-2">
@@ -316,7 +437,7 @@ export class TicketsTicModule {
                             </div>
                         </div>
                     </div>
-                `).join('')}
+                `}).join('')}
             </div>
         `;
     }

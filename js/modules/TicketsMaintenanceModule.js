@@ -28,13 +28,49 @@ export class TicketsMaintenanceModule {
 
             const users = await this.firebaseService.getAllUsers();
 
+            // Filter users for assignment (only equipo_mantenimiento)
+            const mntUsers = users.filter(u => u.roles && u.roles.includes('equipo_mantenimiento'));
+
             // Build assignee options
-            const assigneeOptions = users.map(u =>
+            const assigneeOptions = mntUsers.map(u =>
                 `<option value="${u.uid}" ${ticket.assignedTo === u.uid ? 'selected' : ''}>${u.displayName || u.email}</option>`
             ).join('');
 
             const modal = document.createElement('div');
             modal.className = 'modal fade';
+
+            // Generate History HTML
+            const renderHistory = (history) => {
+                if (!history || history.length === 0) return '<div class="text-muted small">Sin historial</div>';
+
+                return history.sort((a, b) => (b.timestamp?.seconds || b.timestamp) - (a.timestamp?.seconds || a.timestamp)).map(h => {
+                    const date = h.timestamp instanceof Date ? h.timestamp : (h.timestamp.toDate ? h.timestamp.toDate() : new Date(h.timestamp));
+                    let icon = 'circle';
+                    let color = 'secondary';
+
+                    if (h.type === 'creation') { icon = 'plus-circle'; color = 'primary'; }
+                    if (h.type === 'status') { icon = 'exchange-alt'; color = 'info'; }
+                    if (h.type === 'comment') { icon = 'comment'; color = 'warning'; }
+                    if (h.type === 'assignment') { icon = 'user-check'; color = 'success'; }
+
+                    return `
+                        <div class="d-flex mb-3">
+                            <div class="me-3">
+                                <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                    <i class="fas fa-${icon} text-${color}"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="small text-muted mb-1">
+                                    <span class="fw-bold text-dark">${h.userName || 'Usuario'}</span> • ${UIHelpers.formatDate(date)} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                                <div>${h.content}</div>
+                            </div>
+                        </div>
+                     `;
+                }).join('');
+            };
+
             modal.innerHTML = `
                 <div class="modal-dialog modal-lg">
                     <div class="modal-content">
@@ -61,24 +97,33 @@ export class TicketsMaintenanceModule {
                             <div class="row">
                                 <div class="col-md-8">
                                     <div class="mb-3">
-                                        <label class="form-label text-muted small">Descripción</label>
-                                        <div class="p-3 bg-light rounded">${ticket.description}</div>
+                                        <label class="form-label text-muted small fw-bold text-uppercase">Descripción Original</label>
+                                        <div class="p-3 bg-light rounded border">${ticket.description}</div>
                                     </div>
                                     
                                     <div class="mb-3">
-                                        <label class="form-label text-muted small">Ubicación</label>
+                                        <label class="form-label text-muted small fw-bold text-uppercase">Ubicación</label>
                                         <div class="fw-bold">${ticket.location || 'No especificada'}</div>
                                     </div>
 
-                                    ${canEdit ? `
-                                        <div class="mb-3">
-                                            <label class="form-label fw-bold">Observaciones / Comentarios</label>
-                                            <textarea class="form-control" id="ticket-comments" rows="3">${ticket.comments || ''}</textarea>
+                                    ${ticket.comments ? `
+                                        <div class="mb-4">
+                                            <label class="form-label text-muted small fw-bold text-uppercase">Notas Anteriores (Legacy)</label>
+                                            <div class="p-3 bg-white border rounded text-secondary fst-italic">${ticket.comments}</div>
                                         </div>
-                                    ` : ticket.comments ? `
-                                        <div class="mb-3">
-                                            <label class="form-label text-muted small">Observaciones</label>
-                                            <div class="p-2 border rounded bg-white">${ticket.comments}</div>
+                                    ` : ''}
+
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold"><i class="fas fa-history me-2"></i>Historial de Actividad</label>
+                                        <div class="p-3 bg-white border rounded" style="max-height: 400px; overflow-y: auto;">
+                                            ${renderHistory(ticket.history)}
+                                        </div>
+                                    </div>
+
+                                    ${canEdit || (!isPending && !isRejected && ticket.status !== 'cerrado') ? `
+                                        <div class="mt-4">
+                                            <label class="form-label fw-bold">Nueva Observación</label>
+                                            <textarea class="form-control" id="ticket-new-observation" rows="2" placeholder="Escribe una observación..."></textarea>
                                         </div>
                                     ` : ''}
                                 </div>
@@ -150,6 +195,11 @@ export class TicketsMaintenanceModule {
                             </div>
                         </div>
                         <div class="modal-footer">
+                            ${(ticket.requestedBy === this.user.uid && !ticket.assignedTo && (ticket.status === 'abierto' || ticket.status === 'pendiente_validacion')) ? `
+                                <button class="btn btn-danger me-auto" id="btn-delete-ticket">
+                                    <i class="fas fa-trash-alt me-2"></i>Eliminar Petición
+                                </button>
+                            ` : ''}
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
                             
                             ${isPending && isDirector ? `
@@ -157,7 +207,15 @@ export class TicketsMaintenanceModule {
                                 <button type="button" class="btn btn-success" id="btn-approve-ticket">Aprobar</button>
                             ` : ''}
 
-                            ${canEdit ? '<button type="button" class="btn btn-primary" id="btn-update-ticket">Guardar Cambios</button>' : ''}
+                            ${canEdit ? `
+                                <button type="button" class="btn btn-primary" id="btn-update-ticket">
+                                    <i class="fas fa-save me-2"></i>Guardar Cambios
+                                </button>
+                            ` : (!isPending && !isRejected && ticket.status !== 'cerrado' ? `
+                                <button type="button" class="btn btn-primary" id="btn-update-ticket">
+                                    <i class="fas fa-comment me-2"></i>Añadir Observación
+                                </button>
+                            ` : '')}
                         </div>
                     </div>
                 </div>
@@ -167,18 +225,60 @@ export class TicketsMaintenanceModule {
             const bsModal = new bootstrap.Modal(modal);
             bsModal.show();
 
+            // Delete Logic
+            const btnDelete = document.getElementById('btn-delete-ticket');
+            if (btnDelete) {
+                btnDelete.addEventListener('click', async () => {
+                    if (confirm('¿Estás seguro de que deseas eliminar esta petición?')) {
+                        try {
+                            await this.firebaseService.deleteTicket('maintenance', ticketId);
+                            UIHelpers.showToast('Petición eliminada', 'success');
+                            bsModal.hide();
+                            await this.loadTicketsList();
+                        } catch (error) {
+                            console.error('Error deleting ticket:', error);
+                            UIHelpers.showToast('Error al eliminar la petición', 'error');
+                        }
+                    }
+                });
+            }
+
             // Approval Logic
             const btnApprove = document.getElementById('btn-approve-ticket');
             if (btnApprove) {
                 btnApprove.addEventListener('click', async () => {
-                    await this.updateTicketStatus(ticketId, 'abierto', {}, bsModal);
+                    const updates = {
+                        status: 'abierto',
+                        updatedAt: new Date(),
+                        updatedBy: this.user.uid,
+                        newHistoryEntry: { // Using single entry backwards compat logic for simple cases or push array
+                            timestamp: new Date(),
+                            type: 'status',
+                            userId: this.user.uid,
+                            userName: this.user.displayName || this.user.email,
+                            content: `Petición aprobada por dirección. Estado: Abierto`
+                        }
+                    };
+                    await this.updateTicketStatus(ticketId, updates, bsModal);
                 });
             }
 
             const btnReject = document.getElementById('btn-reject-ticket');
             if (btnReject) {
                 btnReject.addEventListener('click', async () => {
-                    await this.updateTicketStatus(ticketId, 'rechazado', {}, bsModal);
+                    const updates = {
+                        status: 'rechazado',
+                        updatedAt: new Date(),
+                        updatedBy: this.user.uid,
+                        newHistoryEntry: {
+                            timestamp: new Date(),
+                            type: 'status',
+                            userId: this.user.uid,
+                            userName: this.user.displayName || this.user.email,
+                            content: `Petición rechazada por dirección.`
+                        }
+                    };
+                    await this.updateTicketStatus(ticketId, updates, bsModal);
                 });
             }
 
@@ -186,13 +286,65 @@ export class TicketsMaintenanceModule {
             const btnUpdate = document.getElementById('btn-update-ticket');
             if (btnUpdate) {
                 btnUpdate.addEventListener('click', async () => {
-                    const status = document.getElementById('ticket-status').value;
-                    const comments = document.getElementById('ticket-comments').value;
-                    const assignedTo = document.getElementById('ticket-assigned').value;
-                    const resolutionTime = parseInt(document.getElementById('ticket-time').value) || 0;
-                    const totalCost = parseFloat(document.getElementById('ticket-cost').value) || 0;
+                    const updates = {
+                        updatedAt: new Date(),
+                        updatedBy: this.user.uid
+                    };
 
-                    await this.updateTicketStatus(ticketId, status, { comments, assignedTo, resolutionTime, totalCost }, bsModal);
+                    let newHistoryEntries = [];
+
+                    // Observation
+                    const newObservation = document.getElementById('ticket-new-observation') ? document.getElementById('ticket-new-observation').value.trim() : null;
+                    if (newObservation) {
+                        newHistoryEntries.push({
+                            timestamp: new Date(),
+                            type: 'comment',
+                            userId: this.user.uid,
+                            userName: this.user.displayName || this.user.email,
+                            content: newObservation
+                        });
+                    }
+
+                    if (canEdit) {
+                        const status = document.getElementById('ticket-status').value;
+                        if (status !== ticket.status) {
+                            updates.status = status;
+                            newHistoryEntries.push({
+                                timestamp: new Date(),
+                                type: 'status',
+                                userId: this.user.uid,
+                                userName: this.user.displayName || this.user.email,
+                                content: `Estado cambiado de ${ticket.status} a ${status}`
+                            });
+                        }
+
+                        const assignedTo = document.getElementById('ticket-assigned').value;
+                        if (assignedTo !== ticket.assignedTo) {
+                            updates.assignedTo = assignedTo;
+                            const newUser = users.find(u => u.uid === assignedTo);
+                            const newUserName = newUser ? (newUser.displayName || newUser.email) : 'Sin asignar';
+                            newHistoryEntries.push({
+                                timestamp: new Date(),
+                                type: 'assignment',
+                                userId: this.user.uid,
+                                userName: this.user.displayName || this.user.email,
+                                content: `Asignado a ${newUserName}`
+                            });
+                        }
+
+                        updates.resolutionTime = parseInt(document.getElementById('ticket-time').value) || 0;
+                        updates.totalCost = parseFloat(document.getElementById('ticket-cost').value) || 0;
+                    }
+
+                    if (newHistoryEntries.length > 0) {
+                        updates.newHistoryEntries = newHistoryEntries;
+                    }
+
+                    if (Object.keys(updates).length > 2 || newHistoryEntries.length > 0) { // Just generic check
+                        await this.updateTicketStatus(ticketId, updates, bsModal);
+                    } else {
+                        bsModal.hide();
+                    }
                 });
             }
 
@@ -200,14 +352,9 @@ export class TicketsMaintenanceModule {
         };
 
         // Helper for update
-        this.updateTicketStatus = async (ticketId, status, extraData, modalInstance) => {
+        this.updateTicketStatus = async (ticketId, updates, modalInstance) => {
             try {
-                await this.firebaseService.updateTicket('maintenance', ticketId, {
-                    status,
-                    updatedAt: new Date(),
-                    updatedBy: this.user.uid,
-                    ...extraData
-                });
+                await this.firebaseService.updateTicket('maintenance', ticketId, updates);
                 UIHelpers.showToast('Incidencia actualizada', 'success');
                 modalInstance.hide();
                 await this.loadTicketsList();
@@ -318,68 +465,63 @@ export class TicketsMaintenanceModule {
                 return;
             }
 
-            const pendingTickets = tickets.filter(t => t.status === 'pendiente_validacion');
+            // Group tickets by status for Kanban
+            const validationTickets = tickets.filter(t => t.status === 'pendiente_validacion');
             const openTickets = tickets.filter(t => t.status === 'abierto');
             const inProgressTickets = tickets.filter(t => t.status === 'en_progreso');
-            const resolvedTickets = tickets.filter(t => t.status === 'resuelto' || t.status === 'cerrado');
-            const rejectedTickets = tickets.filter(t => t.status === 'rechazado');
+            const completedTickets = tickets.filter(t => t.status === 'resuelto' || t.status === 'cerrado' || t.status === 'rechazado');
 
             container.innerHTML = `
-                <ul class="nav nav-tabs mb-3">
-                    ${this.canApprove ? `
-                    <li class="nav-item">
-                        <a class="nav-link active" data-bs-toggle="tab" href="#tab-mnt-pending">
-                            Pendientes <span class="badge bg-warning text-dark">${pendingTickets.length}</span>
-                        </a>
-                    </li>
-                    ` : ''}
-                    <li class="nav-item">
-                        <a class="nav-link ${!this.canApprove ? 'active' : ''}" data-bs-toggle="tab" href="#tab-mnt-open">
-                            Abiertas <span class="badge bg-danger">${openTickets.length}</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" data-bs-toggle="tab" href="#tab-mnt-progress">
-                            En Progreso <span class="badge bg-warning">${inProgressTickets.length}</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" data-bs-toggle="tab" href="#tab-mnt-resolved">
-                            Resueltas <span class="badge bg-success">${resolvedTickets.length}</span>
-                        </a>
-                    </li>
-                    ${rejectedTickets.length > 0 ? `
-                    <li class="nav-item">
-                        <a class="nav-link" data-bs-toggle="tab" href="#tab-mnt-rejected">
-                            Rechazadas <span class="badge bg-secondary">${rejectedTickets.length}</span>
-                        </a>
-                    </li>
-                    ` : ''}
-                </ul>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="card h-100 border-0 bg-light">
+                            <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-search me-2"></i>Por Validar</span>
+                                <span class="badge bg-white text-primary rounded-pill">${validationTickets.length}</span>
+                            </div>
+                            <div class="card-body p-2" style="max-height: 70vh; overflow-y: auto;">
+                                ${this.renderTicketsList(validationTickets, true)}
+                            </div>
+                        </div>
+                    </div>
 
-                <div class="tab-content">
-                    ${this.canApprove ? `
-                    <div class="tab-pane fade show active" id="tab-mnt-pending">
-                        ${this.renderTicketsList(pendingTickets, true)}
+                    <div class="col-md-3">
+                        <div class="card h-100 border-0 bg-light">
+                            <div class="card-header bg-danger text-white fw-bold d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-exclamation-circle me-2"></i>Abiertas</span>
+                                <span class="badge bg-white text-danger rounded-pill">${openTickets.length}</span>
+                            </div>
+                            <div class="card-body p-2" style="max-height: 70vh; overflow-y: auto;">
+                                ${this.renderTicketsList(openTickets)}
+                            </div>
+                        </div>
                     </div>
-                    ` : ''}
-                    <div class="tab-pane fade ${!this.canApprove ? 'show active' : ''}" id="tab-mnt-open">
-                        ${this.renderTicketsList(openTickets)}
+                    
+                    <div class="col-md-3">
+                        <div class="card h-100 border-0 bg-light">
+                            <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-spinner me-2"></i>En Progreso</span>
+                                <span class="badge bg-white text-dark rounded-pill">${inProgressTickets.length}</span>
+                            </div>
+                            <div class="card-body p-2" style="max-height: 70vh; overflow-y: auto;">
+                                ${this.renderTicketsList(inProgressTickets)}
+                            </div>
+                        </div>
                     </div>
-                    <div class="tab-pane fade" id="tab-mnt-progress">
-                        ${this.renderTicketsList(inProgressTickets)}
+
+                    <div class="col-md-3">
+                        <div class="card h-100 border-0 bg-light">
+                            <div class="card-header bg-success text-white fw-bold d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-check-circle me-2"></i>Finalizadas</span>
+                                <span class="badge bg-white text-success rounded-pill">${completedTickets.length}</span>
+                            </div>
+                            <div class="card-body p-2" style="max-height: 70vh; overflow-y: auto;">
+                                ${this.renderTicketsList(completedTickets)}
+                            </div>
+                        </div>
                     </div>
-                    <div class="tab-pane fade" id="tab-mnt-resolved">
-                        ${this.renderTicketsList(resolvedTickets)}
-                    </div>
-                     ${rejectedTickets.length > 0 ? `
-                    <div class="tab-pane fade" id="tab-mnt-rejected">
-                        ${this.renderTicketsList(rejectedTickets)}
-                    </div>
-                    ` : ''}
                 </div>
             `;
-
         } catch (error) {
             console.error('Error loading maintenance tickets:', error);
             container.innerHTML = '<div class="alert alert-danger">Error al cargar las peticiones</div>';
@@ -393,8 +535,16 @@ export class TicketsMaintenanceModule {
 
         return `
             <div class="list-group">
-                ${tickets.map(ticket => `
-                    <a href="#" class="list-group-item list-group-item-action ticket-item priority-${ticket.priority}" onclick="event.preventDefault(); window.viewTicketMaintenance('${ticket.id}')">
+                ${tickets.map(ticket => {
+            const isOwner = ticket.requestedBy === this.user.uid;
+            const canEdit = this.canManage; // Team member
+            const canView = isOwner || canEdit;
+            const isDisabled = !canView;
+
+            return `
+                    <a href="#" class="list-group-item list-group-item-action ticket-item priority-${ticket.priority} ${isDisabled ? 'bg-light text-muted opacity-75' : ''}" 
+                        onclick="event.preventDefault(); ${isDisabled ? '' : `window.viewTicketMaintenance('${ticket.id}')`}"
+                        ${isDisabled ? 'style="pointer-events: none; cursor: default;"' : ''}>
                         <div class="d-flex justify-content-between align-items-start">
                             <div class="flex-grow-1">
                                 <div class="d-flex align-items-center mb-2">
@@ -419,7 +569,7 @@ export class TicketsMaintenanceModule {
                             </div>
                         </div>
                     </a>
-                `).join('')}
+                `}).join('')}
             </div>
         `;
     }
