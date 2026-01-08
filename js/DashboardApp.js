@@ -14,6 +14,7 @@ import { LaptopCartsModule } from './modules/LaptopCartsModule.js';
 import { AdminModule } from './modules/AdminModule.js';
 import { DepartmentsModule } from './modules/DepartmentsModule.js';
 import { MyDepartmentModule } from './modules/MyDepartmentModule.js';
+import { HelpModule } from './modules/HelpModule.js';
 
 class DashboardApp {
     constructor() {
@@ -209,6 +210,11 @@ class DashboardApp {
             const deptLink = document.getElementById('nav-my-dept');
             if (deptLink) deptLink.closest('li').classList.remove('d-none');
         }
+
+        // Help Route
+        this.router.register('/ayuda', () => {
+            return new HelpModule(mainContent, this.firebaseService, this.user, this.userRoles, this.moduleConfig);
+        });
     }
 
     setupEventListeners() {

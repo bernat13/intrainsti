@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, query, where, onSnapshot, getDocs, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, query, where, onSnapshot, getDocs, arrayUnion, arrayRemove, orderBy, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import firebaseConfig from './firebase-config.js';
 
@@ -392,21 +392,34 @@ export class FirebaseService {
         }
     }
 
-    async getLoginLogs() {
+    async getLoginLogs(pageSize = 20, lastDoc = null) {
         try {
-            const q = query(collection(this.db, 'login_logs'));
+            let q = query(
+                collection(this.db, 'login_logs'),
+                orderBy('timestamp', 'desc'),
+                limit(pageSize)
+            );
+
+            if (lastDoc) {
+                q = query(
+                    collection(this.db, 'login_logs'),
+                    orderBy('timestamp', 'desc'),
+                    startAfter(lastDoc),
+                    limit(pageSize)
+                );
+            }
+
             const snap = await getDocs(q);
             const logs = [];
-            snap.forEach(doc => logs.push({ id: doc.id, ...doc.data() }));
-            // Client-side sort to avoid index requirements during dev
-            return logs.sort((a, b) => {
-                const tA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
-                const tB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
-                return tB - tA;
-            });
+            snap.forEach(doc => logs.push({ id: doc.id, ...doc.data(), _doc: doc }));
+
+            return {
+                logs: logs,
+                lastVisible: snap.docs[snap.docs.length - 1] || null
+            };
         } catch (e) {
             console.error("Error fetching login logs:", e);
-            return [];
+            return { logs: [], lastVisible: null };
         }
     }
 

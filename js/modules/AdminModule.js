@@ -6,6 +6,12 @@ export class AdminModule {
         this.firebaseService = firebaseService;
         this.user = user;
 
+        this.auditPagination = {
+            pageSize: 20,
+            currentPage: 1,
+            cursors: [null] // Index 0 is null (start), Index 1 is lastDoc of page 1, etc.
+        };
+
         this.render();
 
         // Attach global functions
@@ -302,13 +308,45 @@ export class AdminModule {
         }
     }
 
-    async loadAuditLogs() {
+    async loadAuditLogs(direction = 'first') {
         const container = document.getElementById('audit-table-container');
         container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></div>';
 
         try {
-            const logs = await this.firebaseService.getLoginLogs();
-            if (logs.length === 0) {
+            if (direction === 'first') {
+                this.auditPagination.currentPage = 1;
+                this.auditPagination.cursors = [null];
+            } else if (direction === 'next') {
+                this.auditPagination.currentPage++;
+            } else if (direction === 'prev' && this.auditPagination.currentPage > 1) {
+                this.auditPagination.currentPage--;
+            }
+
+            // Get the cursor for the current page request
+            // If page is 1, cursor is at index 0 (null) because we want start.
+            // If page is 2, cursors[1] should hold the last doc of page 1?
+            // Wait, logic:
+            // Page 1: startAfter(cursors[0]) -> cursors[0] is null. returns docs, LAST doc is stored[1].
+            // Page 2: startAfter(cursors[1]) -> returns docs. LAST doc is stored[2].
+            const currentCursor = this.auditPagination.cursors[this.auditPagination.currentPage - 1];
+
+            const result = await this.firebaseService.getLoginLogs(this.auditPagination.pageSize, currentCursor);
+            const logs = result.logs;
+
+            // Store cursor for next page if we have results
+            if (result.lastVisible) {
+                this.auditPagination.cursors[this.auditPagination.currentPage] = result.lastVisible;
+            }
+
+            if (logs.length === 0 && this.auditPagination.currentPage > 1) {
+                // If we went next and found nothing, go back? Or just show empty
+                container.innerHTML = '<div class="alert alert-info">No hay más registros.</div>';
+                // Decrease page count to keep state consistent?
+                this.auditPagination.currentPage--;
+                // Re-render prev page? For now let's just show controls to go back
+            }
+
+            if (logs.length === 0 && this.auditPagination.currentPage === 1) {
                 container.innerHTML = '<div class="alert alert-info">No hay registros de actividad.</div>';
                 return;
             }
@@ -345,8 +383,20 @@ export class AdminModule {
             }).join('')}
                     </tbody>
                 </table>
-                <div class="text-muted small text-end mt-2">Mostrando últimos ${logs.length} registros (Orden: Más reciente primero)</div>
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <button class="btn btn-sm btn-outline-secondary" id="audit-prev" ${this.auditPagination.currentPage === 1 ? 'disabled' : ''}>
+                        <i class="fas fa-chevron-left me-1"></i> Anterior
+                    </button>
+                    <span class="text-muted small">Página ${this.auditPagination.currentPage}</span>
+                    <button class="btn btn-sm btn-outline-secondary" id="audit-next" ${logs.length < this.auditPagination.pageSize ? 'disabled' : ''}>
+                        Siguiente <i class="fas fa-chevron-right ms-1"></i>
+                    </button>
+                </div>
             `;
+
+            document.getElementById('audit-prev').addEventListener('click', () => this.loadAuditLogs('prev'));
+            document.getElementById('audit-next').addEventListener('click', () => this.loadAuditLogs('next'));
+
         } catch (error) {
             console.error('Error loading audit logs:', error);
             container.innerHTML = '<div class="alert alert-danger">Error al cargar registros</div>';
