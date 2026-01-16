@@ -12,11 +12,29 @@ export class AdminModule {
             cursors: [null] // Index 0 is null (start), Index 1 is lastDoc of page 1, etc.
         };
 
+        this.sortState = {
+            column: 'displayName',
+            direction: 'asc'
+        };
+
+        this.users = [];
+        this.departments = [];
+
         this.render();
 
         // Attach global functions
         window.editUser = this.openEditUserModal.bind(this);
     }
+
+    // ... (keep openEditUserModal as is, skipping lines 21-137)
+    // Wait, I can't skip lines in replace_file_content. 
+    // I need to only replace the parts I want to change.
+    // The previous tool call view_file output shows I can see the whole file.
+    // I will use multi_replace to be precise.
+    // Actually, I am using replace_file_content here, which is for single contiguous block.
+    // But I need to change constructor AND loadUsers.
+    // Using multi_replace_file_content is better.
+
 
     async openEditUserModal(uid) {
         const users = await this.firebaseService.getAllUsers();
@@ -72,6 +90,11 @@ export class AdminModule {
                                 <label class="form-check-label" for="role-3d">Equipo Impresión 3D</label>
                             </div>
                             <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="role-dual" value="equipo_dual"
+                                    ${user.roles?.includes('equipo_dual') ? 'checked' : ''}>
+                                <label class="form-check-label" for="role-dual">Equipo Dual</label>
+                            </div>
+                            <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="role-dir" value="equipo_directivo"
                                     ${user.roles?.includes('equipo_directivo') ? 'checked' : ''}>
                                 <label class="form-check-label" for="role-dir">Equipo Directivo</label>
@@ -115,6 +138,7 @@ export class AdminModule {
             if (document.getElementById('role-tic').checked) roles.push('equipo_tic');
             if (document.getElementById('role-mnt').checked) roles.push('equipo_mantenimiento');
             if (document.getElementById('role-3d').checked) roles.push('equipo_3d');
+            if (document.getElementById('role-dual').checked) roles.push('equipo_dual');
             if (document.getElementById('role-dir').checked) roles.push('equipo_directivo');
             if (document.getElementById('role-director').checked) roles.push('director');
             if (document.getElementById('role-tester').checked) roles.push('tester');
@@ -208,7 +232,7 @@ export class AdminModule {
             </div>
         `;
 
-        this.loadUsers();
+        this.fetchUsers();
         this.loadAuditLogs();
         this.loadModuleConfig();
 
@@ -227,6 +251,7 @@ export class AdminModule {
                 { id: 'tickets_tic', label: 'Peticiones TIC' },
                 { id: 'tickets_maintenance', label: 'Peticiones Mantenimiento' },
                 { id: 'tickets_3d', label: 'Peticiones 3D' },
+                { id: 'dual', label: 'Gestión Dual' },
                 { id: 'sum', label: 'Reserva Salón de Actos / SUM' },
                 { id: 'carts', label: 'Reserva Carros Portátiles' }
                 // departments is hidden from here as it's admin internal
@@ -277,35 +302,99 @@ export class AdminModule {
         }
     }
 
-    async loadUsers() {
+    async fetchUsers() {
         const container = document.getElementById('users-table-container');
 
         try {
-            const users = await this.firebaseService.getAllUsers();
-            const departments = await this.firebaseService.getAllDepartments();
-
-            container.innerHTML = `
-                <table class="table table-striped table-hover">
-                    <thead>
-                        <tr>
-                            <th>Usuario</th>
-                            <th>Email</th>
-                            <th>Departamento</th>
-                            <th>Roles</th>
-                            <th>Admin</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${users.map(user => this.renderUserRow(user, departments)).join('')}
-                    </tbody>
-                </table>
-            `;
+            this.users = await this.firebaseService.getAllUsers();
+            this.departments = await this.firebaseService.getAllDepartments();
+            this.renderUserTable();
 
         } catch (error) {
             console.error('Error loading users:', error);
             container.innerHTML = '<div class="alert alert-danger">Error al cargar usuarios</div>';
         }
+    }
+
+    renderUserTable() {
+        const container = document.getElementById('users-table-container');
+        if (!container) return;
+
+        // Sort users
+        const sortedUsers = [...this.users].sort((a, b) => {
+            const valA = this.getSortValue(a, this.sortState.column);
+            const valB = this.getSortValue(b, this.sortState.column);
+
+            if (valA < valB) return this.sortState.direction === 'asc' ? -1 : 1;
+            if (valA > valB) return this.sortState.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        // Helper to generate header with sort arrow
+        const renderHeader = (col, label) => {
+            let icon = '';
+            if (this.sortState.column === col) {
+                icon = this.sortState.direction === 'asc'
+                    ? '<i class="fas fa-sort-up ms-1"></i>'
+                    : '<i class="fas fa-sort-down ms-1"></i>';
+            }
+            return `
+                <th style="cursor: pointer;" class="sortable-header" data-column="${col}">
+                    ${label} ${icon}
+                </th>
+            `;
+        };
+
+        container.innerHTML = `
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        ${renderHeader('displayName', 'Usuario')}
+                        ${renderHeader('email', 'Email')}
+                        ${renderHeader('department', 'Departamento')}
+                        ${renderHeader('roles', 'Roles')}
+                        ${renderHeader('isAdmin', 'Admin')}
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sortedUsers.map(user => this.renderUserRow(user, this.departments)).join('')}
+                </tbody>
+            </table>
+        `;
+
+        // Add event listeners to headers
+        container.querySelectorAll('.sortable-header').forEach(th => {
+            th.addEventListener('click', () => {
+                this.handleSort(th.dataset.column);
+            });
+        });
+    }
+
+    handleSort(column) {
+        if (this.sortState.column === column) {
+            this.sortState.direction = this.sortState.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.sortState.column = column;
+            this.sortState.direction = 'asc';
+        }
+        this.renderUserTable();
+    }
+
+    getSortValue(user, column) {
+        if (column === 'department') {
+            return this.getDepartmentName(user.department, this.departments).toLowerCase();
+        }
+        if (column === 'roles') {
+            // Sort by roles (just stringifying them for simple sort, or could count them)
+            return (user.roles || []).join(', ').toLowerCase();
+        }
+        if (column === 'displayName') {
+            return (user.displayName || user.email.split('@')[0]).toLowerCase();
+        }
+        const val = user[column];
+        if (typeof val === 'string') return val.toLowerCase();
+        return val;
     }
 
     async loadAuditLogs(direction = 'first') {

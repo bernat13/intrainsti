@@ -146,6 +146,8 @@ export class UIHelpers {
             'jefe_departamento': 'Jefe de Departamento',
             'equipo_tic': 'Equipo TIC',
             'equipo_mantenimiento': 'Equipo Mantenimiento',
+            'equipo_3d': 'Equipo Impresión 3D',
+            'equipo_dual': 'Equipo Dual',
             'equipo_directivo': 'Equipo Directivo',
             'director': 'Director/a'
         };

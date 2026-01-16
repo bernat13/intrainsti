@@ -164,6 +164,19 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin() || hasRole('equipo_tic'));
     }
 
+    // Modulo DUAL
+    match /companies/{companyId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || hasRole('equipo_dual');
+    }
+
+    match /dual_students/{studentId} {
+      // Read: Equipo Dual y Admin. Tal vez tutores propios? 
+      // Por simplicidad de la primera versiÃ³n, restringido a equipo dual.
+      allow read: if isAuthenticated() && (isAdmin() || hasRole('equipo_dual'));
+      allow write: if isAdmin() || hasRole('equipo_dual');
+    }
+
     // Registros de acceso
     match /login_logs/{logId} {
       allow create: if request.auth != null;

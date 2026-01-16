@@ -15,7 +15,12 @@ export class DashboardModule {
     isModuleVisible(key) {
         const state = this.moduleConfig[key];
         // Default to true if undefined (legacy/transition)
-        if (state === 'active' || state === true || state === undefined) return true;
+        if (state === 'active' || state === true || state === undefined) {
+            if (key === 'dual') {
+                return this.userRoles.includes('equipo_dual') || this.isAdmin;
+            }
+            return true;
+        }
         if (state === 'testers') return this.userRoles.includes('tester');
         return false;
     }
@@ -75,6 +80,7 @@ export class DashboardModule {
             { key: 'tickets_tic', title: 'Peticiones TIC', icon: 'laptop', color: 'warning', link: '#/tickets-tic', desc: 'Soporte técnico informático' },
             { key: 'tickets_maintenance', title: 'Peticiones Mantenimiento', icon: 'tools', color: 'danger', link: '#/tickets-mantenimiento', desc: 'Reparaciones e infraestructura' },
             { key: 'tickets_3d', title: 'Peticiones 3D', icon: 'cube', color: 'success', link: '#/tickets-3d', desc: 'Peticiones de impresión' },
+            { key: 'dual', title: 'Gestión Dual', icon: 'user-graduate', color: 'purple', link: '#/dual', desc: 'Control de alumnos y empresas' },
             { key: 'sum', title: 'Reserva SUM', icon: 'building', color: 'secondary', link: '#/reserva-sum', desc: 'Salón de Actos' },
             { key: 'carts', title: 'Carros Portátiles', icon: 'shopping-cart', color: 'dark', link: '#/reserva-carros', desc: 'Reserva de equipos' }
         ];

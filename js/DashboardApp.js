@@ -15,6 +15,7 @@ import { AdminModule } from './modules/AdminModule.js';
 import { DepartmentsModule } from './modules/DepartmentsModule.js';
 import { MyDepartmentModule } from './modules/MyDepartmentModule.js';
 import { HelpModule } from './modules/HelpModule.js';
+import { DualModule } from './modules/DualModule.js';
 
 class DashboardApp {
     constructor() {
@@ -89,6 +90,7 @@ class DashboardApp {
             'tickets_tic': '#/tickets-tic',
             'tickets_maintenance': '#/tickets-mantenimiento',
             'tickets_3d': '#/tickets-3d',
+            'dual': '#/dual',
             'sum': '#/reserva-sum',
             'carts': '#/reserva-carros'
         };
@@ -143,6 +145,14 @@ class DashboardApp {
                 allowed = true;
             } else if (state === 'testers') {
                 allowed = this.userRoles.includes('tester');
+            } else if (state === 'active' && moduleKey === 'dual') {
+                // Dual module specific role check even if active
+                // Or maybe we treat it as 'active' but only show if have role?
+                // Plan said: "Visible ONLY to users with the equipo_dual role".
+                // If config says 'active', maybe we still restrict it hard?
+                // Or we rely on the config being set to specific logic?
+                // Let's implement hard check here for safety + config
+                allowed = this.userRoles.includes('equipo_dual') || this.isAdmin;
             }
 
             if (!allowed) {
@@ -181,6 +191,10 @@ class DashboardApp {
 
         this.router.register('/tickets-3d', () => {
             return checkAccess('tickets_3d', () => new Tickets3DModule(mainContent, this.firebaseService, this.user, this.userRoles, this.isAdmin));
+        });
+
+        this.router.register('/dual', () => {
+            return checkAccess('dual', () => new DualModule(mainContent, this.firebaseService, this.user, this.userRoles));
         });
 
         this.router.register('/reserva-sum', () => {
