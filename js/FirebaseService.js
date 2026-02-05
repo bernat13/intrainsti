@@ -986,7 +986,17 @@ export class FirebaseService {
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     }
 
-    async reserveCart(dateStr, slotIndex, slotLabel, cartId, userUid, userName) {
+    async getCartReservationsInRange(startDate, endDate) {
+        const q = query(
+            collection(this.db, 'cart_reservations'),
+            where('date', '>=', startDate),
+            where('date', '<=', endDate)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    }
+
+    async reserveCart(dateStr, slotIndex, slotLabel, cartId, userUid, userName, comment = '') {
         const reservationData = {
             date: dateStr,
             slotIndex: slotIndex,
@@ -994,6 +1004,7 @@ export class FirebaseService {
             cartId: cartId,
             userId: userUid,
             userName: userName,
+            comment: comment || '',
             createdAt: new Date()
         };
         await addDoc(collection(this.db, 'cart_reservations'), reservationData);
@@ -1001,6 +1012,18 @@ export class FirebaseService {
 
     async cancelCartReservation(reservationId) {
         await deleteDoc(doc(this.db, 'cart_reservations', reservationId));
+    }
+
+    async getReservationsForCartInRange(cartId, slotIndex, startDateStr, userId) {
+        const q = query(
+            collection(this.db, 'cart_reservations'),
+            where('cartId', '==', cartId),
+            where('slotIndex', '==', slotIndex),
+            where('userId', '==', userId),
+            where('date', '>=', startDateStr)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     }
 
     // ==================== SYSTEM SETTINGS ====================

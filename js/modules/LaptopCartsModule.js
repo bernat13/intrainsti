@@ -221,6 +221,7 @@ export class LaptopCartsModule {
                     html += `
                         <td class="${cellClass}" style="cursor: ${cursor}" ${clickAction} title="${tooltip}">
                             <div class="fw-bold small">${reservation.userName}</div>
+                            ${reservation.comment ? `<div class="x-small text-muted fst-italic">${reservation.comment}</div>` : ''}
                             ${canManage ? '<i class="fas fa-times text-danger mt-1"></i>' : ''}
                         </td>
                     `;
@@ -241,17 +242,128 @@ export class LaptopCartsModule {
     }
 
     async makeReservation(slotIndex, slotLabel, cartId, cartName) {
-        if (!confirm(`¿Reservar ${cartName} para ${slotLabel}?`)) return;
+        this.showReservationTypeModal(slotIndex, slotLabel, cartId, cartName);
+    }
 
+    showReservationTypeModal(slotIndex, slotLabel, cartId, cartName) {
+        const existingModal = document.getElementById('reservation-type-modal');
+        if (existingModal) existingModal.remove();
+
+        const dateStr = this.formatDateForInput(this.currentDate);
+        const dayName = this.currentDate.toLocaleDateString('es-ES', { weekday: 'long' });
+
+        const endDate = this.getEndOfSchoolYear();
+        const endDateStr = endDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+
+        const modal = document.createElement('div');
+        modal.id = 'reservation-type-modal';
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Confirmar Reserva</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p><strong>Carro:</strong> ${cartName}</p>
+                        <p><strong>Hora:</strong> ${slotLabel}</p>
+                        
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="radio" name="resType" id="res-single" value="single" checked>
+                            <label class="form-check-label" for="res-single">
+                                Solo el día <strong>${dateStr}</strong>
+                            </label>
+                        </div>
+                        
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="radio" name="resType" id="res-mass" value="mass">
+                            <label class="form-check-label" for="res-mass">
+                                Todas las semanas (cada ${dayName})<br>
+                                <small class="text-muted">Hasta fin de curso (${endDateStr})</small>
+                            </label>
+                        </div>
+
+                        <hr>
+
+                        <div class="form-check mb-2">
+                             <input class="form-check-input" type="checkbox" id="res-for-other">
+                             <label class="form-check-label" for="res-for-other">
+                                 Reservar para otra persona / Comentario
+                             </label>
+                        </div>
+                        <div class="mb-3 d-none" id="res-comment-container">
+                             <input type="text" class="form-control" id="res-comment" placeholder="Nombre de la persona o motivo">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" id="btn-confirm-res">Reservar</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        const checkOther = document.getElementById('res-for-other');
+        const commentContainer = document.getElementById('res-comment-container');
+        const commentInput = document.getElementById('res-comment');
+
+        checkOther.addEventListener('change', () => {
+            if (checkOther.checked) {
+                commentContainer.classList.remove('d-none');
+                commentInput.focus();
+            } else {
+                commentContainer.classList.add('d-none');
+            }
+        });
+
+        document.getElementById('btn-confirm-res').addEventListener('click', async () => {
+            const type = document.querySelector('input[name="resType"]:checked').value;
+            const comment = checkOther.checked ? commentInput.value.trim() : '';
+
+            if (checkOther.checked && !comment) {
+                alert('Por favor, indica el nombre o comentario.');
+                return;
+            }
+
+            bsModal.hide();
+
+            if (type === 'single') {
+                await this.processSingleReservation(dateStr, slotIndex, slotLabel, cartId, cartName, comment);
+            } else {
+                await this.processMassReservation(slotIndex, slotLabel, cartId, cartName, comment);
+            }
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    }
+
+    getEndOfSchoolYear() {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth(); // 0-11
+        let endYear = currentYear;
+        // If August or later, end is next year
+        if (currentMonth >= 7) {
+            endYear = currentYear + 1;
+        }
+        return new Date(endYear, 5, 30); // Month 5 is June
+    }
+
+    async processSingleReservation(dateStr, slotIndex, slotLabel, cartId, cartName, comment = '') {
         try {
-            const dateStr = this.formatDateForInput(this.currentDate);
             await this.firebaseService.reserveCart(
                 dateStr,
                 slotIndex,
                 slotLabel,
                 cartId,
                 this.user.uid,
-                this.user.displayName || this.user.email.split('@')[0]
+                this.user.displayName || this.user.email.split('@')[0],
+                comment
             );
             UIHelpers.showToast('Reserva realizada', 'success');
             await this.loadReservationsView();
@@ -261,16 +373,156 @@ export class LaptopCartsModule {
         }
     }
 
-    async cancelReservation(reservationId) {
-        if (!confirm('¿Cancelar esta reserva?')) return;
-        try {
-            await this.firebaseService.cancelCartReservation(reservationId);
-            UIHelpers.showToast('Reserva cancelada', 'success');
-            await this.loadReservationsView();
-        } catch (error) {
-            console.error(error);
-            UIHelpers.showToast('Error al cancelar', 'error');
+    async processMassReservation(slotIndex, slotLabel, cartId, cartName, comment = '') {
+        const startDate = new Date(this.currentDate);
+        const endDate = this.getEndOfSchoolYear();
+
+        const targetDates = [];
+        let iterDate = new Date(startDate);
+        // Avoid infinite loops just in case
+        let count = 0;
+        while (iterDate <= endDate && count < 60) {
+            targetDates.push(this.formatDateForInput(iterDate));
+            iterDate.setDate(iterDate.getDate() + 7);
+            count++;
         }
+
+        if (targetDates.length === 0) return;
+
+        if (!confirm(`Se comprobará la disponibilidad para ${targetDates.length} días. ¿Continuar?`)) return;
+
+        UIHelpers.showToast('Verificando disponibilidad...', 'info');
+
+        try {
+            const rangeStart = targetDates[0];
+            const rangeEnd = targetDates[targetDates.length - 1];
+
+            const existingReservations = await this.firebaseService.getCartReservationsInRange(rangeStart, rangeEnd);
+
+            const conflicts = [];
+
+            targetDates.forEach(date => {
+                const conflict = existingReservations.find(r =>
+                    r.date === date &&
+                    r.slotIndex === slotIndex &&
+                    r.cartId === cartId
+                );
+                if (conflict) {
+                    conflicts.push(date);
+                }
+            });
+
+            if (conflicts.length > 0) {
+                const conflictStr = conflicts.slice(0, 3).join(', ') + (conflicts.length > 3 ? '...' : '');
+                alert(`No se puede realizar la reserva masiva.\n\nHay conflictos en las siguientes fechas:\n${conflictStr}\n\nNo se ha realizado ninguna reserva.`);
+                return;
+            }
+
+            UIHelpers.showToast('Realizando reservas...', 'info');
+
+            const promises = targetDates.map(date =>
+                this.firebaseService.reserveCart(
+                    date,
+                    slotIndex,
+                    slotLabel,
+                    cartId,
+                    this.user.uid,
+                    this.user.displayName || this.user.email.split('@')[0],
+                    comment
+                )
+            );
+
+            await Promise.all(promises);
+
+            UIHelpers.showToast(`Reservado correctamente para ${targetDates.length} semanas.`, 'success');
+            await this.loadReservationsView();
+
+        } catch (e) {
+            console.error(e);
+            UIHelpers.showToast('Error en el proceso: ' + e.message, 'error');
+        }
+    }
+
+    async cancelReservation(reservationId) {
+        const reservation = this.reservations.find(r => r.id === reservationId);
+        if (!reservation) return;
+
+        // Show Modal for Delete options
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.id = 'delete-reservation-modal';
+        modal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title">Eliminar Reserva</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>¿Qué deseas eliminar?</p>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="delType" id="del-single" value="single" checked>
+                            <label class="form-check-label" for="del-single">
+                                Solo esta reserva (${reservation.date})
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="delType" id="del-mass" value="mass">
+                            <label class="form-check-label" for="del-mass">
+                                Esta y todas las futuras<br>
+                                <small class="text-muted">Todas las reservas de este hueco/carro a partir de hoy.</small>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-danger" id="btn-confirm-delete">Eliminar</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        document.getElementById('btn-confirm-delete').addEventListener('click', async () => {
+            const type = document.querySelector('input[name="delType"]:checked').value;
+            bsModal.hide();
+
+            try {
+                if (type === 'single') {
+                    await this.firebaseService.cancelCartReservation(reservationId);
+                    UIHelpers.showToast('Reserva cancelada', 'success');
+                } else {
+                    if (!confirm('¿Estás seguro de que quieres borrar TODAS las reservas futuras de esta serie?')) return;
+
+                    UIHelpers.showToast('Buscando reservas...', 'info');
+                    const futureReservations = await this.firebaseService.getReservationsForCartInRange(
+                        reservation.cartId,
+                        reservation.slotIndex,
+                        reservation.date,
+                        this.user.uid
+                    );
+
+                    if (futureReservations.length === 0) {
+                        UIHelpers.showToast('No se encontraron reservas futuras.', 'info');
+                        return;
+                    }
+
+                    UIHelpers.showToast(`Eliminando ${futureReservations.length} reservas...`, 'info');
+                    const promises = futureReservations.map(r => this.firebaseService.cancelCartReservation(r.id));
+                    await Promise.all(promises);
+                    UIHelpers.showToast('Reservas eliminadas correctamente', 'success');
+                }
+                await this.loadReservationsView();
+            } catch (error) {
+                console.error(error);
+                UIHelpers.showToast('Error al cancelar', 'error');
+            }
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
     }
 
     // --- Inventory View (TIC) ---
