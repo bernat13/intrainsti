@@ -374,16 +374,29 @@ export class LaptopCartsModule {
     }
 
     async processMassReservation(slotIndex, slotLabel, cartId, cartName, comment = '') {
+        // Use noon to avoid DST midnight issues
         const startDate = new Date(this.currentDate);
+        startDate.setHours(12, 0, 0, 0);
+
         const endDate = this.getEndOfSchoolYear();
+        endDate.setHours(12, 0, 0, 0);
 
         const targetDates = [];
-        let iterDate = new Date(startDate);
-        // Avoid infinite loops just in case
+
+        // Avoid infinite loops
         let count = 0;
-        while (iterDate <= endDate && count < 60) {
-            targetDates.push(this.formatDateForInput(iterDate));
-            iterDate.setDate(iterDate.getDate() + 7);
+        let diffWeeks = 0;
+
+        while (count < 60) {
+            // Calculate next date based on original startDate + weeks, 
+            // instead of accumulating on iterDate to avoid drift.
+            const nextDate = new Date(startDate);
+            nextDate.setDate(startDate.getDate() + (diffWeeks * 7));
+
+            if (nextDate > endDate) break;
+
+            targetDates.push(this.formatDateForInput(nextDate));
+            diffWeeks++;
             count++;
         }
 
