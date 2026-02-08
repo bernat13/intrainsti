@@ -393,6 +393,27 @@ export class FirebaseService {
         await updateDoc(userRef, { department: department });
     }
 
+    async updateUser(uid, data) {
+        const userRef = doc(this.db, "users", uid);
+        await updateDoc(userRef, data);
+    }
+
+    // ==================== DUAL INTERACTIONS ====================
+
+    async getInteractionsByAuthor(authorUid) {
+        const q = query(
+            collection(this.db, "dual_interactions"),
+            where("author", "==", authorUid),
+            orderBy("date", "desc")
+        );
+        const querySnapshot = await getDocs(q);
+        const interactions = [];
+        querySnapshot.forEach((doc) => {
+            interactions.push({ id: doc.id, ...doc.data() });
+        });
+        return interactions;
+    }
+
     // ==================== AUDIT LOGS ====================
 
     async recordLoginEvent(data) {
@@ -838,6 +859,34 @@ export class FirebaseService {
     async deleteCompany(id) {
         const docRef = doc(this.db, "companies", id);
         await deleteDoc(docRef);
+    }
+
+    // --- Dual Interactions (CMS) ---
+
+    async getDualInteractions(relatedId) {
+        const q = query(
+            collection(this.db, "dual_interactions"),
+            where("relatedId", "==", relatedId)
+        );
+        const snapshot = await getDocs(q);
+        const interactions = [];
+        snapshot.forEach(doc => {
+            interactions.push({ id: doc.id, ...doc.data() });
+        });
+        // Sort by date desc
+        return interactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    }
+
+    async addDualInteraction(data) {
+        const docRef = await addDoc(collection(this.db, "dual_interactions"), {
+            ...data,
+            createdAt: new Date()
+        });
+        return docRef.id;
+    }
+
+    async deleteDualInteraction(id) {
+        await deleteDoc(doc(this.db, "dual_interactions", id));
     }
 
     // --- Dual Students ---

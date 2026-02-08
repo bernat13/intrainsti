@@ -32,6 +32,16 @@ export class UIHelpers {
         return icons[type] || 'info-circle';
     }
 
+    static getInteractionIcon(type) {
+        const icons = {
+            'Llamada': '<i class="fas fa-phone"></i>',
+            'Visita': '<i class="fas fa-building"></i>',
+            'Email': '<i class="fas fa-envelope"></i>',
+            'Reunión': '<i class="fas fa-users"></i>'
+        };
+        return icons[type] || '<i class="fas fa-comment"></i>';
+    }
+
     // Confirm dialog
     static async confirm(message, title = '¿Estás seguro?') {
         return new Promise((resolve) => {

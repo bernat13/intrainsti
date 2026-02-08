@@ -33,7 +33,7 @@ service cloud.firestore {
       // Pero no, solo admin edita usuarios completos. Jefe solo "añade".
       // Vamos a permitir al admin todo.
       allow create: if isAuthenticated() && request.auth.uid == userId; // Self registration
-      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || hasRole('jefe_departamento')); 
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || hasRole('jefe_departamento') || hasRole('equipo_dual')); 
       // Nota: un usuario puede actualizar su perfi, admin todo, jefe dept puede que necesite para "añadir".
       // Limitaremos la lógica de "añadir" en el cliente, pero aquí dejamos la puerta si es necesario.
       allow delete: if isAdmin();
@@ -175,6 +175,12 @@ service cloud.firestore {
       // Por simplicidad de la primera versiÃ³n, restringido a equipo dual.
       allow read: if isAuthenticated() && (isAdmin() || hasRole('equipo_dual'));
       allow write: if isAdmin() || hasRole('equipo_dual');
+    }
+
+    // Dual Interactions
+    match /dual_interactions/{interactionId} {
+      allow read: if isAuthenticated() && (isAdmin() || hasRole('equipo_dual'));
+      allow write: if isAuthenticated() && (isAdmin() || hasRole('equipo_dual'));
     }
 
     // Registros de acceso
