@@ -1,9 +1,9 @@
 import { UIHelpers } from '../UIHelpers.js';
 
 export class Tickets3DModule {
-    constructor(container, firebaseService, user, userRoles, isAdmin) {
+    constructor(container, supabaseService, user, userRoles, isAdmin) {
         this.container = container;
-        this.firebaseService = firebaseService;
+        this.supabaseService = supabaseService;
         this.user = user;
         this.userRoles = userRoles;
         this.isAdmin = isAdmin;
@@ -62,8 +62,8 @@ export class Tickets3DModule {
 
         try {
             const [users, departments] = await Promise.all([
-                this.firebaseService.getAllUsers(),
-                this.firebaseService.getAllDepartments()
+                this.supabaseService.getAllUsers(),
+                this.supabaseService.getAllDepartments()
             ]);
 
             this.usersMap = {};
@@ -75,7 +75,7 @@ export class Tickets3DModule {
             const userData = users.find(u => u.uid === this.user.uid);
             const userDept = userData ? userData.department : null;
 
-            const tickets = await this.firebaseService.getTickets('3d', this.user.uid, this.userRoles, userDept);
+            const tickets = await this.supabaseService.getTickets('3d', this.user.uid, this.userRoles, userDept);
 
             if (tickets.length === 0) {
                 UIHelpers.showEmptyState(container, 'No hay peticiones registradas', 'cube');
@@ -154,23 +154,23 @@ export class Tickets3DModule {
                             <div class="flex-grow-1">
                                 <div class="d-flex align-items-center mb-2">
                                     <span class="badge bg-secondary me-2">${ticket.ticketNumber}</span>
-                                    <h6 class="mb-0">${ticket.title}</h6>
+                                    <h6 class="mb-0">${UIHelpers.escapeHtml(ticket.title)}</h6>
                                 </div>
-                                <p class="mb-1 text-muted small">${ticket.description}</p>
+                                <p class="mb-1 text-muted small">${UIHelpers.escapeHtml(ticket.description)}</p>
                                 <div class="small text-muted mb-2">
-                                    <i class="fas fa-link me-1"></i><a href="${ticket.stlUrl || '#'}" target="_blank">${ticket.stlUrl ? 'Ver Archivo STL' : 'Sin archivo'}</a>
+                                    <i class="fas fa-link me-1"></i><a href="${UIHelpers.escapeHtml(ticket.stlUrl || '#')}" target="_blank">${ticket.stlUrl ? 'Ver Archivo STL' : 'Sin archivo'}</a>
                                     <span class="mx-2">•</span>
                                     <i class="fas fa-layer-group me-1"></i>${ticket.filamentUsed || 0}g
                                     <span class="mx-2">•</span>
                                     <i class="fas fa-clock me-1"></i>${ticket.printTime || 0} min
                                 </div>
                                 <div class="small text-muted">
-                                    <i class="fas fa-user me-1"></i>${ticket.requestedByName} 
+                                    <i class="fas fa-user me-1"></i>${UIHelpers.escapeHtml(ticket.requestedByName)} 
                                     <span class="mx-2">•</span>
-                                    <i class="fas fa-building me-1"></i>${(this.deptMap && this.deptMap[ticket.requestedByDepartment]) || ticket.requestedByDepartment}
+                                    <i class="fas fa-building me-1"></i>${UIHelpers.escapeHtml((this.deptMap && this.deptMap[ticket.requestedByDepartment]) || ticket.requestedByDepartment)}
                                     <span class="mx-2">•</span>
                                     <i class="fas fa-calendar me-1"></i>${UIHelpers.formatDate(ticket.createdAt)}
-                                    ${ticket.assignedTo ? `<span class="mx-2">•</span><i class="fas fa-user-check text-primary me-1"></i>${this.usersMap[ticket.assignedTo] || 'Asignado'}` : ''}
+                                    ${ticket.assignedTo ? `<span class="mx-2">•</span><i class="fas fa-user-check text-primary me-1"></i>${UIHelpers.escapeHtml(this.usersMap[ticket.assignedTo] || 'Asignado')}` : ''}
                                 </div>
                             </div>
                             <div class="text-end ms-3">
@@ -249,11 +249,11 @@ export class Tickets3DModule {
             }
 
             try {
-                const users = await this.firebaseService.getAllUsers();
+                const users = await this.supabaseService.getAllUsers();
                 const userData = users.find(u => u.uid === this.user.uid);
                 const userDepartment = userData?.department || 'Sin departamento';
 
-                const result = await this.firebaseService.createTicket('3d', {
+                const result = await this.supabaseService.createTicket('3d', {
                     title,
                     description,
                     priority,
@@ -274,19 +274,19 @@ export class Tickets3DModule {
 
     async openManageModal(ticketId) {
         // Implementation for managing 3d ticket (add filament, time, photo, update status)
-        const tickets = await this.firebaseService.getTickets('3d', this.user.uid, this.userRoles);
+        const tickets = await this.supabaseService.getTickets('3d', this.user.uid, this.userRoles);
         const ticket = tickets.find(t => t.id === ticketId);
 
         if (!ticket) return;
 
-        const users = await this.firebaseService.getAllUsers();
+        const users = await this.supabaseService.getAllUsers();
 
         // Filter users for assignment (only equipo_3d)
         const team3dUsers = users.filter(u => u.roles && u.roles.includes('equipo_3d'));
 
         // Build assignee options
         const assigneeOptions = team3dUsers.map(u =>
-            `<option value="${u.uid}" ${ticket.assignedTo === u.uid ? 'selected' : ''}>${u.displayName || u.email}</option>`
+            `<option value="${u.uid}" ${ticket.assignedTo === u.uid ? 'selected' : ''}>${UIHelpers.escapeHtml(u.displayName || u.email)}</option>`
         ).join('');
 
         const modal = document.createElement('div');
@@ -315,9 +315,9 @@ export class Tickets3DModule {
                         </div>
                         <div>
                             <div class="small text-muted mb-1">
-                                <span class="fw-bold text-dark">${h.userName || 'Usuario'}</span> • ${UIHelpers.formatDate(date)} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                <span class="fw-bold text-dark">${UIHelpers.escapeHtml(h.userName || 'Usuario')}</span> • ${UIHelpers.formatDate(date)} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </div>
-                            <div>${h.content}</div>
+                            <div>${UIHelpers.escapeHtml(h.content)}</div>
                         </div>
                     </div>
                     `;
@@ -336,11 +336,11 @@ export class Tickets3DModule {
                             <div class="col-md-7">
                                 <div class="mb-3">
                                     <label class="form-label small text-muted">Descripción</label>
-                                    <div class="p-3 bg-light rounded">${ticket.description}</div>
+                                    <div class="p-3 bg-light rounded">${UIHelpers.escapeHtml(ticket.description)}</div>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label small text-muted">URL STL</label>
-                                    <div><a href="${ticket.stlUrl}" target="_blank">${ticket.stlUrl}</a></div>
+                                    <div><a href="${UIHelpers.escapeHtml(ticket.stlUrl)}" target="_blank">${UIHelpers.escapeHtml(ticket.stlUrl)}</a></div>
                                 </div>
                                 
                                 <div class="mb-3">
@@ -416,7 +416,7 @@ export class Tickets3DModule {
             btnDelete.addEventListener('click', async () => {
                 if (confirm('¿Estás seguro de que deseas eliminar esta petición?')) {
                     try {
-                        await this.firebaseService.deleteTicket('3d', ticketId);
+                        await this.supabaseService.deleteTicket('3d', ticketId);
                         UIHelpers.showToast('Petición eliminada', 'success');
                         bsModal.hide();
                         await this.loadTicketsList();
@@ -495,7 +495,7 @@ export class Tickets3DModule {
                 // Only send update if meaningful change or forced? 
                 // For simplified UX, always update if button clicked.
 
-                await this.firebaseService.updateTicket('3d', ticketId, updates);
+                await this.supabaseService.updateTicket('3d', ticketId, updates);
 
                 UIHelpers.showToast('Petición actualizada', 'success');
                 bsModal.hide();
@@ -520,8 +520,8 @@ export class Tickets3DModule {
         try {
             // Get all tickets and departments
             const [allTickets, departments] = await Promise.all([
-                this.firebaseService.getTickets('3d', this.user.uid, this.userRoles),
-                this.firebaseService.getAllDepartments()
+                this.supabaseService.getTickets('3d', this.user.uid, this.userRoles),
+                this.supabaseService.getAllDepartments()
             ]);
 
             // Create Department Map (ID -> Name)

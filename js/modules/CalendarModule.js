@@ -2,9 +2,9 @@ import { Calendar } from '../Calendar.js';
 import { UIHelpers } from '../UIHelpers.js';
 
 export class CalendarModule {
-    constructor(container, firebaseService, user, isAdmin, userRoles, moduleConfig) {
+    constructor(container, supabaseService, user, isAdmin, userRoles, moduleConfig) {
         this.container = container;
-        this.firebaseService = firebaseService;
+        this.supabaseService = supabaseService;
         this.user = user;
         this.isAdmin = isAdmin;
         this.userRoles = userRoles || [];
@@ -98,7 +98,7 @@ export class CalendarModule {
             monthLabel: monthLabel,
             prevBtn: prevBtn,
             nextBtn: nextBtn
-        }, this.firebaseService, this.user, this.userRoles, {
+        }, this.supabaseService, this.user, this.userRoles, {
             showNavigationIcons: true,
             moduleConfig: this.moduleConfig // Pass config for visibility checks
         }); // Pass roles
@@ -121,7 +121,7 @@ export class CalendarModule {
                 syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Sincronizando...';
 
                 try {
-                    const count = await this.firebaseService.syncDriveEvents(year, month);
+                    const count = await this.supabaseService.syncDriveEvents(year, month);
                     UIHelpers.showToast(`Sincronización completada. ${count} documentos vinculados.`, 'success');
                 } catch (error) {
                     console.error(error);
@@ -189,7 +189,7 @@ export class CalendarModule {
 
             try {
                 // Call service to add event
-                await this.firebaseService.addCalendarEvent(dateStr, {
+                await this.supabaseService.addCalendarEvent(dateStr, {
                     title,
                     type,
                     time: time || null,

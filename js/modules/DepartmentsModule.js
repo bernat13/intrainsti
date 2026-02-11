@@ -1,9 +1,9 @@
 import { UIHelpers } from '../UIHelpers.js';
 
 export class DepartmentsModule {
-    constructor(container, firebaseService, user, isAdmin) {
+    constructor(container, supabaseService, user, isAdmin) {
         this.container = container;
-        this.firebaseService = firebaseService;
+        this.supabaseService = supabaseService;
         this.user = user;
         this.isAdmin = isAdmin;
 
@@ -43,8 +43,8 @@ export class DepartmentsModule {
 
         try {
             const [departments, users] = await Promise.all([
-                this.firebaseService.getAllDepartments(),
-                this.firebaseService.getAllUsers()
+                this.supabaseService.getAllDepartments(),
+                this.supabaseService.getAllUsers()
             ]);
 
             this.departments = departments;
@@ -72,12 +72,12 @@ export class DepartmentsModule {
                             <div class="card h-100 shadow-sm ${!dept.active ? 'bg-light text-muted border-secondary' : ''}">
                                 <div class="card-body">
                                     <div class="d-flex justify-content-between align-items-start mb-2">
-                                        <h5 class="card-title fw-bold mb-0 text-truncate" title="${dept.name}">
-                                            ${dept.name}
+                                        <h5 class="card-title fw-bold mb-0 text-truncate" title="${UIHelpers.escapeHtml(dept.name)}">
+                                            ${UIHelpers.escapeHtml(dept.name)}
                                         </h5>
                                         ${!dept.active ? '<span class="badge bg-secondary">Inactivo</span>' : ''}
                                     </div>
-                                    <p class="text-muted small mb-2">${dept.code || 'Sin código'}</p>
+                                    <p class="text-muted small mb-2">${UIHelpers.escapeHtml(dept.code || 'Sin código')}</p>
                                     
                                     <div class="d-flex align-items-center mb-3">
                                         <i class="fas fa-users me-2 text-primary"></i>
@@ -127,11 +127,11 @@ export class DepartmentsModule {
                             <div class="row g-3">
                                 <div class="col-md-8">
                                     <label class="form-label">Nombre</label>
-                                    <input type="text" class="form-control" id="dept-name" value="${department?.name || ''}" required>
+                                    <input type="text" class="form-control" id="dept-name" value="${UIHelpers.escapeHtml(department?.name || '')}" required>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label">Código</label>
-                                    <input type="text" class="form-control" id="dept-code" value="${department?.code || ''}">
+                                    <input type="text" class="form-control" id="dept-code" value="${UIHelpers.escapeHtml(department?.code || '')}">
                                 </div>
                             </div>
                             <div class="form-check mt-3">
@@ -190,7 +190,7 @@ export class DepartmentsModule {
                 if (!userId) return;
 
                 try {
-                    await this.firebaseService.updateUserDepartment(userId, department.id);
+                    await this.supabaseService.updateUserDepartment(userId, department.id);
                     // Refresh users locally for UI speed or reload all?
                     // Better verify by reloading users list
                     // For simplicity, let's update local user object and re-render
@@ -209,7 +209,7 @@ export class DepartmentsModule {
 
             document.getElementById('btn-delete-dept').addEventListener('click', async () => {
                 if (await UIHelpers.confirm('¿Seguro que quieres eliminar (desactivar) este departamento?')) {
-                    await this.firebaseService.deleteDepartment(department.id);
+                    await this.supabaseService.deleteDepartment(department.id);
                     bsModal.hide();
                     this.loadDepartments();
                     UIHelpers.showToast('Departamento eliminado', 'success');
@@ -229,13 +229,13 @@ export class DepartmentsModule {
 
             try {
                 if (isEdit) {
-                    await this.firebaseService.updateDepartment(department.id, { name, code, active });
+                    await this.supabaseService.updateDepartment(department.id, { name, code, active });
                     // Update local
                     department.name = name;
                     department.code = code;
                     department.active = active;
                 } else {
-                    await this.firebaseService.createDepartment({ name, code, active });
+                    await this.supabaseService.createDepartment({ name, code, active });
                 }
                 bsModal.hide();
                 this.loadDepartments();
@@ -261,8 +261,8 @@ export class DepartmentsModule {
         list.innerHTML = members.map(user => `
             <div class="list-group-item d-flex justify-content-between align-items-center">
                 <div>
-                    <div class="fw-bold">${user.displayName || user.email}</div>
-                    <div class="small text-muted">${user.email}</div>
+                    <div class="fw-bold">${UIHelpers.escapeHtml(user.displayName || user.email)}</div>
+                    <div class="small text-muted">${UIHelpers.escapeHtml(user.email)}</div>
                 </div>
                 <button class="btn btn-sm btn-outline-danger btn-remove-member" data-uid="${user.uid}">
                     <i class="fas fa-times"></i>
@@ -275,7 +275,7 @@ export class DepartmentsModule {
                 if (await UIHelpers.confirm('¿Quitar a este usuario del departamento?')) {
                     const uid = btn.dataset.uid;
                     try {
-                        await this.firebaseService.updateUserDepartment(uid, null);
+                        await this.supabaseService.updateUserDepartment(uid, null);
                         // Update local
                         const user = this.users.find(u => u.uid === uid);
                         if (user) user.department = null;
@@ -304,7 +304,7 @@ export class DepartmentsModule {
         select.innerHTML = '<option value="">Seleccionar usuario para añadir...</option>' +
             candidates.map(u => `
                 <option value="${u.uid}">
-                    ${u.displayName || u.email} ${u.department ? '(En otro dpto)' : '(Sin dpto)'}
+                    ${UIHelpers.escapeHtml(u.displayName || u.email)} ${u.department ? '(En otro dpto)' : '(Sin dpto)'}
                 </option>
             `).join('');
     }

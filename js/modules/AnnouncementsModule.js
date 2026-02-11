@@ -1,15 +1,18 @@
 import { UIHelpers } from '../UIHelpers.js';
 
 export class AnnouncementsModule {
-    constructor(container, firebaseService, user, userRoles, isAdmin) {
+    constructor(container, supabaseService, user, userRoles, isAdmin) {
         this.container = container;
-        this.firebaseService = firebaseService;
+        this.supabaseService = supabaseService;
         this.user = user;
         this.userRoles = userRoles;
         this.isAdmin = isAdmin;
         this.canCreate = userRoles.includes('equipo_directivo') || userRoles.includes('director');
 
         this.render();
+
+        // Bind global function
+        window.deleteAnnouncement = this.deleteAnnouncement.bind(this);
     }
 
     async render() {
@@ -39,7 +42,7 @@ export class AnnouncementsModule {
         UIHelpers.showLoading(container);
 
         try {
-            const announcements = await this.firebaseService.getAnnouncements(this.userRoles);
+            const announcements = await this.supabaseService.getAnnouncements(this.userRoles);
 
             if (announcements.length === 0) {
                 UIHelpers.showEmptyState(container, 'No hay anuncios disponibles', 'bullhorn');
@@ -61,13 +64,13 @@ export class AnnouncementsModule {
             <div class="card announcement-card ${priorityClass} mb-3">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h5 class="card-title mb-0">${announcement.title}</h5>
+                        <h5 class="card-title mb-0">${UIHelpers.escapeHtml(announcement.title)}</h5>
                         ${UIHelpers.getPriorityBadge(announcement.priority || 'normal')}
                     </div>
-                    <p class="card-text">${announcement.content}</p>
+                    <p class="card-text">${UIHelpers.escapeHtml(announcement.content)}</p>
                     <div class="d-flex justify-content-between align-items-center">
                         <small class="text-muted">
-                            <i class="fas fa-user me-1"></i>${announcement.authorName} • 
+                            <i class="fas fa-user me-1"></i>${UIHelpers.escapeHtml(announcement.authorName)} • 
                             <i class="fas fa-clock me-1"></i>${UIHelpers.formatDate(announcement.createdAt)}
                         </small>
                         ${(this.canCreate && announcement.author === this.user.uid) || this.isAdmin ?
@@ -146,7 +149,7 @@ export class AnnouncementsModule {
             }
 
             try {
-                await this.firebaseService.createAnnouncement({
+                await this.supabaseService.createAnnouncement({
                     title,
                     content,
                     priority,
@@ -165,23 +168,21 @@ export class AnnouncementsModule {
         modal.addEventListener('hidden.bs.modal', () => modal.remove());
     }
 
+    async deleteAnnouncement(id) {
+        if (await UIHelpers.confirm('¿Estás seguro de que quieres eliminar este anuncio?')) {
+            try {
+                await this.supabaseService.deleteAnnouncement(id);
+                UIHelpers.showToast('Anuncio eliminado', 'success');
+                await this.loadAnnouncements(); // Reload list instead of page reload
+            } catch (error) {
+                console.error('Error deleting announcement:', error);
+                UIHelpers.showToast('Error al eliminar el anuncio', 'error');
+            }
+        }
+    }
+
     destroy() {
         // Cleanup global function
         delete window.deleteAnnouncement;
     }
 }
-
-// Global function for delete button
-window.deleteAnnouncement = async (id) => {
-    if (await UIHelpers.confirm('¿Estás seguro de que quieres eliminar este anuncio?')) {
-        try {
-            const firebaseService = new (await import('../FirebaseService.js')).FirebaseService();
-            await firebaseService.deleteAnnouncement(id);
-            UIHelpers.showToast('Anuncio eliminado', 'success');
-            window.location.reload(); // Simple reload, could be improved with event system
-        } catch (error) {
-            console.error('Error deleting announcement:', error);
-            UIHelpers.showToast('Error al eliminar el anuncio', 'error');
-        }
-    }
-};

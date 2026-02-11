@@ -1,9 +1,9 @@
 import { UIHelpers } from '../UIHelpers.js';
 
 export class DashboardModule {
-    constructor(container, firebaseService, user, userRoles, isAdmin, moduleConfig) {
+    constructor(container, supabaseService, user, userRoles, isAdmin, moduleConfig) {
         this.container = container;
-        this.firebaseService = firebaseService;
+        this.supabaseService = supabaseService;
         this.user = user;
         this.userRoles = userRoles;
         this.isAdmin = isAdmin;
@@ -101,15 +101,15 @@ export class DashboardModule {
             const pKeys = [];
 
             if (visibleModules.some(m => m.key === 'tickets_tic')) {
-                promises.push(this.firebaseService.getTickets('tic', this.user.uid, this.userRoles));
+                promises.push(this.supabaseService.getTickets('tic', this.user.uid, this.userRoles));
                 pKeys.push('tic');
             }
             if (visibleModules.some(m => m.key === 'tickets_maintenance')) {
-                promises.push(this.firebaseService.getTickets('maintenance', this.user.uid, this.userRoles));
+                promises.push(this.supabaseService.getTickets('maintenance', this.user.uid, this.userRoles));
                 pKeys.push('mnt');
             }
             if (visibleModules.some(m => m.key === 'anuncios')) {
-                promises.push(this.firebaseService.getAnnouncements(this.userRoles));
+                promises.push(this.supabaseService.getAnnouncements(this.userRoles));
                 pKeys.push('ann');
             }
 
@@ -209,7 +209,7 @@ export class DashboardModule {
         if (!container) return; // Should exist if wrapper called
 
         try {
-            const announcements = await this.firebaseService.getAnnouncements(this.userRoles);
+            const announcements = await this.supabaseService.getAnnouncements(this.userRoles);
             const recent = announcements.slice(0, 3);
 
             if (recent.length === 0) {
@@ -251,12 +251,12 @@ export class DashboardModule {
             let myOpenTickets = [];
 
             if (this.isModuleVisible('tickets_tic')) {
-                const ticketsTic = await this.firebaseService.getTickets('tic', this.user.uid, this.userRoles);
+                const ticketsTic = await this.supabaseService.getTickets('tic', this.user.uid, this.userRoles);
                 myOpenTickets.push(...ticketsTic.filter(t => t.requestedBy === this.user.uid && (t.status === 'abierto' || t.status === 'en_progreso')));
             }
 
             if (this.isModuleVisible('tickets_maintenance')) {
-                const ticketsMnt = await this.firebaseService.getTickets('maintenance', this.user.uid, this.userRoles);
+                const ticketsMnt = await this.supabaseService.getTickets('maintenance', this.user.uid, this.userRoles);
                 myOpenTickets.push(...ticketsMnt.filter(t => t.requestedBy === this.user.uid && (t.status === 'abierto' || t.status === 'en_progreso')));
             }
 

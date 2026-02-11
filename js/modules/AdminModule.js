@@ -1,9 +1,9 @@
 import { UIHelpers } from '../UIHelpers.js';
 
 export class AdminModule {
-    constructor(container, firebaseService, user) {
+    constructor(container, supabaseService, user) {
         this.container = container;
-        this.firebaseService = firebaseService;
+        this.supabaseService = supabaseService;
         this.user = user;
 
         this.auditPagination = {
@@ -37,8 +37,8 @@ export class AdminModule {
 
 
     async openEditUserModal(uid) {
-        const users = await this.firebaseService.getAllUsers();
-        const departments = await this.firebaseService.getAllDepartments();
+        const users = await this.supabaseService.getAllUsers();
+        const departments = await this.supabaseService.getAllDepartments();
         const user = users.find(u => u.uid === uid);
 
         if (!user) return;
@@ -54,7 +54,7 @@ export class AdminModule {
                     </div>
                     <div class="modal-body">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">${user.email}</label>
+                            <label class="form-label fw-bold">${UIHelpers.escapeHtml(user.email)}</label>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Departamento</label>
@@ -62,7 +62,7 @@ export class AdminModule {
                                 <option value="">Sin asignar</option>
                                 ${departments.filter(d => d.active).map(dept => `
                                     <option value="${dept.id}" ${user.department === dept.id ? 'selected' : ''}>
-                                        ${dept.name}
+                                        ${UIHelpers.escapeHtml(dept.name)}
                                     </option>
                                 `).join('')}
                             </select>
@@ -144,9 +144,9 @@ export class AdminModule {
             if (document.getElementById('role-tester').checked) roles.push('tester');
 
             try {
-                await this.firebaseService.updateUserRoles(uid, roles);
-                await this.firebaseService.updateUserDepartment(uid, department);
-                await this.firebaseService.toggleAdminRole(uid, !isAdmin); // This toggles, so we pass opposite
+                await this.supabaseService.updateUserRoles(uid, roles);
+                await this.supabaseService.updateUserDepartment(uid, department);
+                await this.supabaseService.toggleAdminRole(uid, !isAdmin); // This toggles, so we pass opposite
 
                 UIHelpers.showToast('Usuario actualizado correctamente', 'success');
                 bsModal.hide();
@@ -243,7 +243,7 @@ export class AdminModule {
     async loadModuleConfig() {
         const container = document.getElementById('modules-config-container');
         try {
-            const config = await this.firebaseService.getModuleConfig();
+            const config = await this.supabaseService.getModuleConfig();
 
             const modulesList = [
                 { id: 'calendario', label: 'Calendario' },
@@ -286,7 +286,7 @@ export class AdminModule {
                 });
 
                 try {
-                    await this.firebaseService.updateModuleConfig(newConfig);
+                    await this.supabaseService.updateModuleConfig(newConfig);
                     UIHelpers.showToast('Configuración de módulos actualizada', 'success');
                     // Reload to apply changes (sidebar needs refresh)
                     setTimeout(() => window.location.reload(), 1500);
@@ -306,8 +306,8 @@ export class AdminModule {
         const container = document.getElementById('users-table-container');
 
         try {
-            this.users = await this.firebaseService.getAllUsers();
-            this.departments = await this.firebaseService.getAllDepartments();
+            this.users = await this.supabaseService.getAllUsers();
+            this.departments = await this.supabaseService.getAllDepartments();
             this.renderUserTable();
 
         } catch (error) {
@@ -419,7 +419,7 @@ export class AdminModule {
             // Page 2: startAfter(cursors[1]) -> returns docs. LAST doc is stored[2].
             const currentCursor = this.auditPagination.cursors[this.auditPagination.currentPage - 1];
 
-            const result = await this.firebaseService.getLoginLogs(this.auditPagination.pageSize, currentCursor);
+            const result = await this.supabaseService.getLoginLogs(this.auditPagination.pageSize, currentCursor);
             const logs = result.logs;
 
             // Store cursor for next page if we have results
@@ -462,11 +462,11 @@ export class AdminModule {
                                 <tr>
                                     <td>${date.toLocaleString()}</td>
                                     <td>
-                                        <span class="fw-bold">${log.email}</span>
-                                        ${log.name && log.name !== log.email ? `<div class="text-muted small">${log.name}</div>` : ''}
+                                        <span class="fw-bold">${UIHelpers.escapeHtml(log.email)}</span>
+                                        ${log.name && log.name !== log.email ? `<div class="text-muted small">${UIHelpers.escapeHtml(log.name)}</div>` : ''}
                                     </td>
                                     <td>${badge}</td>
-                                    <td>${log.reason || (isSuccess ? 'Login correcto' : '-')}</td>
+                                    <td>${UIHelpers.escapeHtml(log.reason) || (isSuccess ? 'Login correcto' : '-')}</td>
                                 </tr>
                             `;
             }).join('')}
@@ -499,9 +499,9 @@ export class AdminModule {
 
         return `
             <tr>
-                <td>${user.displayName || user.email.split('@')[0]}</td>
-                <td>${user.email}</td>
-                <td>${this.getDepartmentName(user.department, departments)}</td>
+                <td>${UIHelpers.escapeHtml(user.displayName || user.email.split('@')[0])}</td>
+                <td>${UIHelpers.escapeHtml(user.email)}</td>
+                <td>${UIHelpers.escapeHtml(this.getDepartmentName(user.department, departments))}</td>
                 <td>${rolesBadges || '<span class="text-muted">Sin roles</span>'}</td>
                 <td>${user.isAdmin ? '<span class="badge bg-warning">Sí</span>' : '<span class="text-muted">No</span>'}</td>
                 <td>

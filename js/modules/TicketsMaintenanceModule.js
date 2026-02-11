@@ -1,9 +1,9 @@
 import { UIHelpers } from '../UIHelpers.js';
 
 export class TicketsMaintenanceModule {
-    constructor(container, firebaseService, user, userRoles, isAdmin) {
+    constructor(container, supabaseService, user, userRoles, isAdmin) {
         this.container = container;
-        this.firebaseService = firebaseService;
+        this.supabaseService = supabaseService;
         this.user = user;
         this.userRoles = userRoles;
         this.isAdmin = isAdmin;
@@ -26,14 +26,14 @@ export class TicketsMaintenanceModule {
             // Maintenance Team can edit ONLY if NOT pending and NOT rejected (approved)
             const canEdit = isMntTeam && !isPending && !isRejected;
 
-            const users = await this.firebaseService.getAllUsers();
+            const users = await this.supabaseService.getAllUsers();
 
             // Filter users for assignment (only equipo_mantenimiento)
             const mntUsers = users.filter(u => u.roles && u.roles.includes('equipo_mantenimiento'));
 
             // Build assignee options
             const assigneeOptions = mntUsers.map(u =>
-                `<option value="${u.uid}" ${ticket.assignedTo === u.uid ? 'selected' : ''}>${u.displayName || u.email}</option>`
+                `<option value="${u.uid}" ${ticket.assignedTo === u.uid ? 'selected' : ''}>${UIHelpers.escapeHtml(u.displayName || u.email)}</option>`
             ).join('');
 
             const modal = document.createElement('div');
@@ -62,9 +62,9 @@ export class TicketsMaintenanceModule {
                             </div>
                             <div>
                                 <div class="small text-muted mb-1">
-                                    <span class="fw-bold text-dark">${h.userName || 'Usuario'}</span> • ${UIHelpers.formatDate(date)} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    <span class="fw-bold text-dark">${UIHelpers.escapeHtml(h.userName || 'Usuario')}</span> • ${UIHelpers.formatDate(date)} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
-                                <div>${h.content}</div>
+                                <div>${UIHelpers.escapeHtml(h.content)}</div>
                             </div>
                         </div>
                      `;
@@ -76,7 +76,7 @@ export class TicketsMaintenanceModule {
                     <div class="modal-content">
                         <div class="modal-header">
                             <h5 class="modal-title">
-                                <i class="fas fa-tools me-2"></i>${ticket.ticketNumber} - ${ticket.title}
+                                <i class="fas fa-tools me-2"></i>${ticket.ticketNumber} - ${UIHelpers.escapeHtml(ticket.title)}
                             </h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
@@ -98,18 +98,18 @@ export class TicketsMaintenanceModule {
                                 <div class="col-md-8">
                                     <div class="mb-3">
                                         <label class="form-label text-muted small fw-bold text-uppercase">Descripción Original</label>
-                                        <div class="p-3 bg-light rounded border">${ticket.description}</div>
+                                        <div class="p-3 bg-light rounded border">${UIHelpers.escapeHtml(ticket.description)}</div>
                                     </div>
                                     
                                     <div class="mb-3">
                                         <label class="form-label text-muted small fw-bold text-uppercase">Ubicación</label>
-                                        <div class="fw-bold">${ticket.location || 'No especificada'}</div>
+                                        <div class="fw-bold">${UIHelpers.escapeHtml(ticket.location || 'No especificada')}</div>
                                     </div>
 
                                     ${ticket.comments ? `
                                         <div class="mb-4">
                                             <label class="form-label text-muted small fw-bold text-uppercase">Notas Anteriores (Legacy)</label>
-                                            <div class="p-3 bg-white border rounded text-secondary fst-italic">${ticket.comments}</div>
+                                            <div class="p-3 bg-white border rounded text-secondary fst-italic">${UIHelpers.escapeHtml(ticket.comments)}</div>
                                         </div>
                                     ` : ''}
 
@@ -134,8 +134,8 @@ export class TicketsMaintenanceModule {
                                             
                                             <div class="mb-2">
                                                 <small class="text-muted d-block">Solicitante</small>
-                                                <strong>${ticket.requestedByName}</strong>
-                                                <div class="small text-muted">${(this.deptMap && this.deptMap[ticket.requestedByDepartment]) || ticket.requestedByDepartment}</div>
+                                                <strong>${UIHelpers.escapeHtml(ticket.requestedByName)}</strong>
+                                                <div class="small text-muted">${UIHelpers.escapeHtml((this.deptMap && this.deptMap[ticket.requestedByDepartment]) || ticket.requestedByDepartment)}</div>
                                             </div>
 
                                             <div class="mb-2">
@@ -170,7 +170,7 @@ export class TicketsMaintenanceModule {
                                                     <small class="text-muted d-block">Asignado a</small>
                                                     <div class="d-flex align-items-center">
                                                         <i class="fas fa-user-check me-2 text-primary"></i>
-                                                        <strong>${(users.find(u => u.uid === ticket.assignedTo) || {}).displayName || 'Usuario'}</strong>
+                                                        <strong>${UIHelpers.escapeHtml((users.find(u => u.uid === ticket.assignedTo) || {}).displayName || 'Usuario')}</strong>
                                                     </div>
                                                 </div>
                                             ` : ''}
@@ -231,7 +231,7 @@ export class TicketsMaintenanceModule {
                 btnDelete.addEventListener('click', async () => {
                     if (confirm('¿Estás seguro de que deseas eliminar esta petición?')) {
                         try {
-                            await this.firebaseService.deleteTicket('maintenance', ticketId);
+                            await this.supabaseService.deleteTicket('maintenance', ticketId);
                             UIHelpers.showToast('Petición eliminada', 'success');
                             bsModal.hide();
                             await this.loadTicketsList();
@@ -354,7 +354,7 @@ export class TicketsMaintenanceModule {
         // Helper for update
         this.updateTicketStatus = async (ticketId, updates, modalInstance) => {
             try {
-                await this.firebaseService.updateTicket('maintenance', ticketId, updates);
+                await this.supabaseService.updateTicket('maintenance', ticketId, updates);
                 UIHelpers.showToast('Incidencia actualizada', 'success');
                 modalInstance.hide();
                 await this.loadTicketsList();
@@ -444,8 +444,8 @@ export class TicketsMaintenanceModule {
 
         try {
             const [users, departments] = await Promise.all([
-                this.firebaseService.getAllUsers(),
-                this.firebaseService.getAllDepartments()
+                this.supabaseService.getAllUsers(),
+                this.supabaseService.getAllDepartments()
             ]);
 
             this.usersMap = {};
@@ -457,7 +457,7 @@ export class TicketsMaintenanceModule {
             const userData = users.find(u => u.uid === this.user.uid);
             const userDept = userData ? userData.department : null;
 
-            const tickets = await this.firebaseService.getTickets('maintenance', this.user.uid, this.userRoles, userDept);
+            const tickets = await this.supabaseService.getTickets('maintenance', this.user.uid, this.userRoles, userDept);
             this.tickets = tickets;
 
             if (tickets.length === 0) {
@@ -549,18 +549,18 @@ export class TicketsMaintenanceModule {
                             <div class="flex-grow-1">
                                 <div class="d-flex align-items-center mb-2">
                                     <span class="badge bg-secondary me-2">${ticket.ticketNumber}</span>
-                                    <h6 class="mb-0">${ticket.title}</h6>
+                                    <h6 class="mb-0">${UIHelpers.escapeHtml(ticket.title)}</h6>
                                 </div>
-                                <p class="mb-1 text-muted small">${ticket.description}</p>
+                                <p class="mb-1 text-muted small">${UIHelpers.escapeHtml(ticket.description)}</p>
                                 <div class="small text-muted">
-                                    <i class="fas fa-map-marker-alt me-1"></i>${ticket.location || 'Sin ubicación'} 
+                                    <i class="fas fa-map-marker-alt me-1"></i>${UIHelpers.escapeHtml(ticket.location || 'Sin ubicación')} 
                                     <span class="mx-2">•</span>
-                                    <i class="fas fa-user me-1"></i>${ticket.requestedByName}
+                                    <i class="fas fa-user me-1"></i>${UIHelpers.escapeHtml(ticket.requestedByName)}
                                     <span class="mx-2">•</span>
-                                    <i class="fas fa-building me-1"></i>${(this.deptMap && this.deptMap[ticket.requestedByDepartment]) || ticket.requestedByDepartment || 'Sin departamento'}
+                                    <i class="fas fa-building me-1"></i>${UIHelpers.escapeHtml((this.deptMap && this.deptMap[ticket.requestedByDepartment]) || ticket.requestedByDepartment || 'Sin departamento')}
                                     <span class="mx-2">•</span>
                                     <i class="fas fa-clock me-1"></i>${UIHelpers.formatDate(ticket.createdAt)}
-                                    ${ticket.assignedTo ? `<span class="mx-2">•</span><i class="fas fa-user-check text-primary me-1"></i>${this.usersMap[ticket.assignedTo] || 'Asignado'}` : ''}
+                                    ${ticket.assignedTo ? `<span class="mx-2">•</span><i class="fas fa-user-check text-primary me-1"></i>${UIHelpers.escapeHtml(this.usersMap[ticket.assignedTo] || 'Asignado')}` : ''}
                                 </div>
                             </div>
                             <div class="text-end ms-3">
@@ -584,7 +584,7 @@ export class TicketsMaintenanceModule {
     }
 
     async openCreateModal() {
-        const users = this.canManage ? await this.firebaseService.getAllUsers() : [];
+        const users = this.canManage ? await this.supabaseService.getAllUsers() : [];
 
         const modal = document.createElement('div');
         modal.className = 'modal fade';
@@ -601,7 +601,7 @@ export class TicketsMaintenanceModule {
                                 <div class="mb-3">
                                     <label class="form-label bg-warning-subtle px-2 py-1 rounded">Solicitante (Modo Gestión)</label>
                                     <select class="form-select" id="ticket-mnt-requester">
-                                        ${users.map(u => `<option value="${u.uid}" ${u.uid === this.user.uid ? 'selected' : ''}>${u.displayName || u.email} (${u.department || 'Sin Dept'})</option>`).join('')}
+                                        ${users.map(u => `<option value="${u.uid}" ${u.uid === this.user.uid ? 'selected' : ''}>${UIHelpers.escapeHtml(u.displayName || u.email)} (${UIHelpers.escapeHtml(u.department || 'Sin Dept')})</option>`).join('')}
                                     </select>
                                 </div>
                             ` : ''}
@@ -667,17 +667,17 @@ export class TicketsMaintenanceModule {
                     }
                 }
             } else {
-                const userData = (await this.firebaseService.getAllUsers()).find(u => u.uid === this.user.uid);
+                const userData = (await this.supabaseService.getAllUsers()).find(u => u.uid === this.user.uid);
                 targetUserDept = userData?.department || 'Sin departamento';
             }
 
             if (!targetUserDept && !this.canManage) {
-                const u = await this.firebaseService.getUser(targetUserId);
+                const u = await this.supabaseService.getUser(targetUserId);
                 targetUserDept = u?.department || 'Sin departamento';
             }
 
             try {
-                const result = await this.firebaseService.createTicket('maintenance', {
+                const result = await this.supabaseService.createTicket('maintenance', {
                     title,
                     description,
                     location,
@@ -713,8 +713,8 @@ export class TicketsMaintenanceModule {
             // Manager role is 'equipo_mantenimiento'. They see all.
             // Fetch tickets and departments
             const [allTickets, departments] = await Promise.all([
-                this.firebaseService.getTickets('maintenance', this.user.uid, this.userRoles),
-                this.firebaseService.getAllDepartments()
+                this.supabaseService.getTickets('maintenance', this.user.uid, this.userRoles),
+                this.supabaseService.getAllDepartments()
             ]);
 
             // Create Department Map
@@ -737,7 +737,7 @@ export class TicketsMaintenanceModule {
             // calculateStats in FirebaseService returns { total, open, resolved, avgResolutionTime, totalCost, byDepartment, byUser }
             // Maintenance tickets also have costs (laborCost, materialCost -> totalCost).
             // So we can reuse it!
-            const stats = this.firebaseService.calculateStats(tickets, 'maintenance', deptMap);
+            const stats = this.supabaseService.calculateStats(tickets, 'maintenance', deptMap);
 
             container.innerHTML = `
                 <div class="d-flex justify-content-between align-items-center mb-4">

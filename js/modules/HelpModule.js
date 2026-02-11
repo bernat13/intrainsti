@@ -1,7 +1,7 @@
 export class HelpModule {
-    constructor(container, firebaseService, user, userRoles, moduleConfig) {
+    constructor(container, supabaseService, user, userRoles, moduleConfig) {
         this.container = container;
-        this.firebaseService = firebaseService;
+        this.supabaseService = supabaseService;
         this.user = user;
         this.userRoles = userRoles || [];
         this.moduleConfig = moduleConfig || {};

@@ -1,13 +1,15 @@
 import { UIHelpers } from '../UIHelpers.js';
 
 export class MyDepartmentModule {
-    constructor(container, firebaseService, user) {
+    constructor(container, supabaseService, user) {
         this.container = container;
-        this.firebaseService = firebaseService;
+        this.supabaseService = supabaseService;
         this.user = user;
         this.myDepartmentId = null;
 
         this.render();
+
+        window.removeMember = this.removeMember.bind(this);
     }
 
     async render() {
@@ -41,7 +43,7 @@ export class MyDepartmentModule {
     async loadMyDepartment() {
         try {
             // Get current user details to find dept ID
-            const users = await this.firebaseService.getAllUsers();
+            const users = await this.supabaseService.getAllUsers();
             const currentUser = users.find(u => u.uid === this.user.uid);
 
             if (!currentUser || !currentUser.department) {
@@ -52,7 +54,7 @@ export class MyDepartmentModule {
             this.myDepartmentId = currentUser.department;
 
             // Get department details
-            const departments = await this.firebaseService.getAllDepartments();
+            const departments = await this.supabaseService.getAllDepartments();
             const myDept = departments.find(d => d.id === this.myDepartmentId);
 
             document.getElementById('dept-name-display').textContent = myDept ? `Departamento de ${myDept.name}` : 'Departamento Desconocido';
@@ -152,7 +154,7 @@ export class MyDepartmentModule {
 
             try {
                 // Find user by email (inefficient client side search but ok for small org)
-                const users = await this.firebaseService.getAllUsers();
+                const users = await this.supabaseService.getAllUsers();
                 const targetUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
 
                 if (!targetUser) {
@@ -166,7 +168,7 @@ export class MyDepartmentModule {
                 }
 
                 // Update user department
-                await this.firebaseService.updateUserDepartment(targetUser.uid, this.myDepartmentId);
+                await this.supabaseService.updateUserDepartment(targetUser.uid, this.myDepartmentId);
 
                 UIHelpers.showToast(`${targetUser.email} añadido al departamento`, 'success');
                 bsModal.hide();
@@ -180,27 +182,20 @@ export class MyDepartmentModule {
 
         modal.addEventListener('hidden.bs.modal', () => modal.remove());
     }
-}
-
-// Global removal function
-window.removeMember = async (uid) => {
-    if (await UIHelpers.confirm('¿Seguro que quieres eliminar a este usuario del departamento?')) {
-        try {
-            const firebaseService = new (await import('../FirebaseService.js')).FirebaseService();
-            await firebaseService.updateUserDepartment(uid, null);
-            UIHelpers.showToast('Miembro eliminado del departamento', 'success');
-            // Hacky reload, ideally reactive
-            // Since we are not in a reactive framework, we might need to resort to finding the module instance or page reload
-            // Page reload is safest for quick prototypes
-            const currentHash = window.location.hash;
-            if (currentHash.includes('mi-departamento')) {
-                new MyDepartmentModule(document.getElementById('main-content'), firebaseService, firebase.auth().currentUser);
-            } else {
-                window.location.reload();
+    async removeMember(uid) {
+        if (await UIHelpers.confirm('¿Seguro que quieres eliminar a este usuario del departamento?')) {
+            try {
+                await this.supabaseService.updateUserDepartment(uid, null);
+                UIHelpers.showToast('Miembro eliminado del departamento', 'success');
+                await this.loadMyDepartment();
+            } catch (error) {
+                console.error(error);
+                UIHelpers.showToast('Error al eliminar miembro', 'error');
             }
-        } catch (error) {
-            console.error(error);
-            UIHelpers.showToast('Error al eliminar miembro', 'error');
         }
+    }
+
+    destroy() {
+        delete window.removeMember;
     }
 }

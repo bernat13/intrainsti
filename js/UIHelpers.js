@@ -198,4 +198,15 @@ export class UIHelpers {
         const start = this.getSchoolYearStart(date);
         return `${start.getFullYear()}-${start.getFullYear() + 1}`;
     }
+
+    // Escape HTML to prevent XSS
+    static escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
 }

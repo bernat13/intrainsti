@@ -1,9 +1,9 @@
 import { UIHelpers } from '../UIHelpers.js';
 
 export class TicketsTicModule {
-    constructor(container, firebaseService, user, userRoles, isAdmin) {
+    constructor(container, supabaseService, user, userRoles, isAdmin) {
         this.container = container;
-        this.firebaseService = firebaseService;
+        this.supabaseService = supabaseService;
         this.user = user;
         this.userRoles = userRoles;
         this.isAdmin = isAdmin;
@@ -20,14 +20,14 @@ export class TicketsTicModule {
             }
 
             const isTicTeam = this.canManage;
-            const users = await this.firebaseService.getAllUsers();
+            const users = await this.supabaseService.getAllUsers();
 
             // Filter users for assignment (only equipo_tic)
             const ticUsers = users.filter(u => u.roles && u.roles.includes('equipo_tic'));
 
             // Build assignee options
             const assigneeOptions = ticUsers.map(u =>
-                `<option value="${u.uid}" ${ticket.assignedTo === u.uid ? 'selected' : ''}>${u.displayName || u.email}</option>`
+                `<option value="${u.uid}" ${ticket.assignedTo === u.uid ? 'selected' : ''}>${UIHelpers.escapeHtml(u.displayName || u.email)}</option>`
             ).join('');
 
             const modal = document.createElement('div');
@@ -56,9 +56,9 @@ export class TicketsTicModule {
                             </div>
                             <div>
                                 <div class="small text-muted mb-1">
-                                    <span class="fw-bold text-dark">${h.userName || 'Usuario'}</span> • ${UIHelpers.formatDate(date)} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    <span class="fw-bold text-dark">${UIHelpers.escapeHtml(h.userName || 'Usuario')}</span> • ${UIHelpers.formatDate(date)} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
-                                <div>${h.content}</div>
+                                <div>${UIHelpers.escapeHtml(h.content)}</div>
                             </div>
                         </div>
                      `;
@@ -70,7 +70,7 @@ export class TicketsTicModule {
                     <div class="modal-content">
                         <div class="modal-header">
                             <h5 class="modal-title">
-                                <i class="fas fa-ticket-alt me-2"></i>${ticket.ticketNumber} - ${ticket.title}
+                                <i class="fas fa-ticket-alt me-2"></i>${ticket.ticketNumber} - ${UIHelpers.escapeHtml(ticket.title)}
                             </h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
@@ -79,13 +79,13 @@ export class TicketsTicModule {
                                 <div class="col-md-8">
                                     <div class="mb-4">
                                         <label class="form-label text-muted small fw-bold text-uppercase">Descripción Original</label>
-                                        <div class="p-3 bg-light rounded border">${ticket.description}</div>
+                                        <div class="p-3 bg-light rounded border">${UIHelpers.escapeHtml(ticket.description)}</div>
                                     </div>
                                     
                                     ${ticket.comments ? `
                                         <div class="mb-4">
                                             <label class="form-label text-muted small fw-bold text-uppercase">Notas Anteriores (Legacy)</label>
-                                            <div class="p-3 bg-white border rounded text-secondary fst-italic">${ticket.comments}</div>
+                                            <div class="p-3 bg-white border rounded text-secondary fst-italic">${UIHelpers.escapeHtml(ticket.comments)}</div>
                                         </div>
                                     ` : ''}
 
@@ -110,8 +110,8 @@ export class TicketsTicModule {
                                             
                                             <div class="mb-2">
                                                 <small class="text-muted d-block">Solicitante</small>
-                                                <strong>${ticket.requestedByName}</strong>
-                                                <div class="small text-muted">${ticket.requestedByDepartment}</div>
+                                                <strong>${UIHelpers.escapeHtml(ticket.requestedByName)}</strong>
+                                                <div class="small text-muted">${UIHelpers.escapeHtml(ticket.requestedByDepartment)}</div>
                                             </div>
 
                                             <div class="mb-2">
@@ -146,7 +146,7 @@ export class TicketsTicModule {
                                                     <small class="text-muted d-block">Asignado a</small>
                                                     <div class="d-flex align-items-center">
                                                         <i class="fas fa-user-check me-2 text-primary"></i>
-                                                        <strong>${(users.find(u => u.uid === ticket.assignedTo) || {}).displayName || 'Usuario'}</strong>
+                                                        <strong>${UIHelpers.escapeHtml((users.find(u => u.uid === ticket.assignedTo) || {}).displayName || 'Usuario')}</strong>
                                                     </div>
                                                 </div>
                                             ` : ''}
@@ -187,7 +187,7 @@ export class TicketsTicModule {
                 btnDelete.addEventListener('click', async () => {
                     if (confirm('¿Estás seguro de que deseas eliminar esta petición?')) {
                         try {
-                            await this.firebaseService.deleteTicket('tic', ticketId);
+                            await this.supabaseService.deleteTicket('tic', ticketId);
                             UIHelpers.showToast('Petición eliminada', 'success');
                             bsModal.hide();
                             await this.loadTicketsList();
@@ -257,7 +257,7 @@ export class TicketsTicModule {
                                 updates.newHistoryEntries = newHistoryEntries;
                             }
 
-                            await this.firebaseService.updateTicket('tic', ticketId, updates);
+                            await this.supabaseService.updateTicket('tic', ticketId, updates);
 
                             UIHelpers.showToast('Petición actualizada', 'success');
                             bsModal.hide();
@@ -325,8 +325,8 @@ export class TicketsTicModule {
 
         try {
             const [users, departments] = await Promise.all([
-                this.firebaseService.getAllUsers(),
-                this.firebaseService.getAllDepartments()
+                this.supabaseService.getAllUsers(),
+                this.supabaseService.getAllDepartments()
             ]);
 
             this.usersMap = {};
@@ -338,7 +338,7 @@ export class TicketsTicModule {
             const userData = users.find(u => u.uid === this.user.uid);
             const userDept = userData ? userData.department : null;
 
-            const tickets = await this.firebaseService.getTickets('tic', this.user.uid, this.userRoles, userDept);
+            const tickets = await this.supabaseService.getTickets('tic', this.user.uid, this.userRoles, userDept);
             this.tickets = tickets;
 
             if (tickets.length === 0) {
@@ -418,16 +418,16 @@ export class TicketsTicModule {
                             <div class="flex-grow-1">
                                 <div class="d-flex align-items-center mb-2">
                                     <span class="badge bg-secondary me-2">${ticket.ticketNumber}</span>
-                                    <h6 class="mb-0">${ticket.title}</h6>
+                                    <h6 class="mb-0">${UIHelpers.escapeHtml(ticket.title)}</h6>
                                 </div>
-                                <p class="mb-1 text-muted small">${ticket.description}</p>
+                                <p class="mb-1 text-muted small">${UIHelpers.escapeHtml(ticket.description)}</p>
                                 <div class="small text-muted">
-                                    <i class="fas fa-user me-1"></i>${ticket.requestedByName} 
+                                    <i class="fas fa-user me-1"></i>${UIHelpers.escapeHtml(ticket.requestedByName)} 
                                     <span class="mx-2">•</span>
-                                    <i class="fas fa-building me-1"></i>${(this.deptMap && this.deptMap[ticket.requestedByDepartment]) || ticket.requestedByDepartment}
+                                    <i class="fas fa-building me-1"></i>${UIHelpers.escapeHtml((this.deptMap && this.deptMap[ticket.requestedByDepartment]) || ticket.requestedByDepartment)}
                                     <span class="mx-2">•</span>
                                     <i class="fas fa-clock me-1"></i>${UIHelpers.formatDate(ticket.createdAt)}
-                                    ${ticket.assignedTo ? `<span class="mx-2">•</span><i class="fas fa-user-check text-primary me-1"></i>${this.usersMap[ticket.assignedTo] || 'Asignado'}` : ''}
+                                    ${ticket.assignedTo ? `<span class="mx-2">•</span><i class="fas fa-user-check text-primary me-1"></i>${UIHelpers.escapeHtml(this.usersMap[ticket.assignedTo] || 'Asignado')}` : ''}
                                 </div>
                             </div>
                             <div class="text-end ms-3">
@@ -496,11 +496,11 @@ export class TicketsTicModule {
 
             try {
                 // Get user department
-                const users = await this.firebaseService.getAllUsers();
+                const users = await this.supabaseService.getAllUsers();
                 const userData = users.find(u => u.uid === this.user.uid);
                 const userDepartment = userData?.department || 'Sin departamento';
 
-                const result = await this.firebaseService.createTicket('tic', {
+                const result = await this.supabaseService.createTicket('tic', {
                     title,
                     description,
                     priority,
@@ -528,8 +528,8 @@ export class TicketsTicModule {
             // Manager role is 'equipo_tic'. They see all.
             // Fetch tickets and departments
             const [allTickets, departments] = await Promise.all([
-                this.firebaseService.getTickets('tic', this.user.uid, this.userRoles),
-                this.firebaseService.getAllDepartments()
+                this.supabaseService.getTickets('tic', this.user.uid, this.userRoles),
+                this.supabaseService.getAllDepartments()
             ]);
 
             // Create Department Map
@@ -547,7 +547,7 @@ export class TicketsTicModule {
                 return;
             }
 
-            const stats = this.firebaseService.calculateStats(tickets, 'tic', deptMap);
+            const stats = this.supabaseService.calculateStats(tickets, 'tic', deptMap);
 
             container.innerHTML = `
                 <div class="d-flex justify-content-between align-items-center mb-4">

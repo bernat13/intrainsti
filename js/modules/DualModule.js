@@ -1,9 +1,9 @@
 import { UIHelpers } from '../UIHelpers.js';
 
 export class DualModule {
-    constructor(container, firebaseService, user, userRoles) {
+    constructor(container, supabaseService, user, userRoles) {
         this.container = container;
-        this.firebaseService = firebaseService;
+        this.supabaseService = supabaseService;
         this.user = user;
         this.userRoles = userRoles;
 
@@ -180,7 +180,7 @@ export class DualModule {
         // Initial Load
         this.loadCompanies();
         // Pre-load config in background as it is needed for dropdowns
-        this.config = await this.firebaseService.getDualConfig();
+        this.config = await this.supabaseService.getDualConfig();
     }
 
     // ==================== COMPANIES ====================
@@ -192,9 +192,9 @@ export class DualModule {
             // Always reload students to ensure 'hosting' status is accurate if assignments changed
             let allUsers = [];
             [this.companies, this.students, allUsers] = await Promise.all([
-                this.firebaseService.getCompanies(),
-                this.firebaseService.getDualStudents(null),
-                this.firebaseService.getAllUsers()
+                this.supabaseService.getCompanies(),
+                this.supabaseService.getDualStudents(null),
+                this.supabaseService.getAllUsers()
             ]);
 
             this.users = allUsers.filter(u => (u.roles || []).includes('equipo_dual'));
@@ -490,7 +490,7 @@ export class DualModule {
 
         // Load Dual Team users if not loaded
         if (this.users.length === 0) {
-            const allUsers = await this.firebaseService.getAllUsers();
+            const allUsers = await this.supabaseService.getAllUsers();
             this.users = allUsers.filter(u => (u.roles || []).includes('equipo_dual'));
         }
 
@@ -659,9 +659,9 @@ export class DualModule {
 
             try {
                 if (isEdit) {
-                    await this.firebaseService.updateCompany(company.id, data);
+                    await this.supabaseService.updateCompany(company.id, data);
                 } else {
-                    await this.firebaseService.createCompany(data);
+                    await this.supabaseService.createCompany(data);
                 }
                 UIHelpers.showToast('Empresa guardada', 'success');
                 bsModal.hide();
@@ -676,7 +676,7 @@ export class DualModule {
             document.getElementById('btn-delete-comp').addEventListener('click', async () => {
                 if (await UIHelpers.confirm('¿Seguro que quieres eliminar esta empresa?')) {
                     try {
-                        await this.firebaseService.deleteCompany(company.id);
+                        await this.supabaseService.deleteCompany(company.id);
                         UIHelpers.showToast('Empresa eliminada', 'success');
                         bsModal.hide();
                         this.loadCompanies();
@@ -692,7 +692,7 @@ export class DualModule {
     }
 
     async showCompanyHistory(company) {
-        const students = await this.firebaseService.getDualStudents(null);
+        const students = await this.supabaseService.getDualStudents(null);
         const history = students.filter(s => s.companyId === company.id);
 
         const modal = document.createElement('div');
@@ -741,10 +741,10 @@ export class DualModule {
     async loadStudents() {
         const container = document.getElementById('students-table-container');
         try {
-            this.students = await this.firebaseService.getDualStudents(null);
+            this.students = await this.supabaseService.getDualStudents(null);
 
             if (this.companies.length === 0) {
-                this.companies = await this.firebaseService.getCompanies();
+                this.companies = await this.supabaseService.getCompanies();
             }
 
             this.renderStudentsTable();
@@ -993,12 +993,12 @@ export class DualModule {
         const isEdit = !!student;
 
         if (this.users.length === 0) {
-            const allUsers = await this.firebaseService.getAllUsers();
+            const allUsers = await this.supabaseService.getAllUsers();
             this.users = allUsers.filter(u => (u.roles || []).includes('equipo_dual'));
         }
 
         // Ensure config is loaded
-        if (!this.config.cycles.length) this.config = await this.firebaseService.getDualConfig();
+        if (!this.config.cycles.length) this.config = await this.supabaseService.getDualConfig();
 
         const modal = document.createElement('div');
         modal.className = 'modal fade';
@@ -1118,9 +1118,9 @@ export class DualModule {
 
             try {
                 if (isEdit) {
-                    await this.firebaseService.updateDualStudent(student.id, data);
+                    await this.supabaseService.updateDualStudent(student.id, data);
                 } else {
-                    await this.firebaseService.createDualStudent(data);
+                    await this.supabaseService.createDualStudent(data);
                 }
                 UIHelpers.showToast('Alumno guardado', 'success');
                 bsModal.hide();
@@ -1134,7 +1134,7 @@ export class DualModule {
         if (isEdit) {
             document.getElementById('btn-delete-st').addEventListener('click', async () => {
                 if (await UIHelpers.confirm('¿Eliminar alumno?')) {
-                    await this.firebaseService.deleteDualStudent(student.id);
+                    await this.supabaseService.deleteDualStudent(student.id);
                     bsModal.hide();
                     this.loadStudents();
                 }
@@ -1185,7 +1185,7 @@ export class DualModule {
         input.value = '';
 
         try {
-            await this.firebaseService.updateDualConfig(this.config);
+            await this.supabaseService.updateDualConfig(this.config);
             this.renderConfigList(type, this.config[type]);
         } catch (e) {
             console.error(e);
@@ -1198,7 +1198,7 @@ export class DualModule {
 
         this.config[type].splice(index, 1);
         try {
-            await this.firebaseService.updateDualConfig(this.config);
+            await this.supabaseService.updateDualConfig(this.config);
             this.renderConfigList(type, this.config[type]);
         } catch (e) {
             console.error(e);
@@ -1282,7 +1282,7 @@ export class DualModule {
 
         // Load Courses
         try {
-            const { courses, token } = await this.firebaseService.getClassroomCourses();
+            const { courses, token } = await this.supabaseService.getClassroomCourses();
             document.getElementById('loading-courses').classList.add('d-none');
             const coursesList = document.getElementById('courses-list');
             coursesList.classList.remove('d-none');
@@ -1331,7 +1331,7 @@ export class DualModule {
         list.innerHTML = '<div class="text-center"><div class="spinner-border text-primary"></div></div>';
 
         try {
-            const students = await this.firebaseService.getClassroomStudents(courseId, token);
+            const students = await this.supabaseService.getClassroomStudents(courseId, token);
 
             if (students.length === 0) {
                 list.innerHTML = '<div class="alert alert-warning">Esta clase no tiene alumnos.</div>';
@@ -1401,7 +1401,7 @@ export class DualModule {
         let imported = 0;
         for (const s of selected) {
             try {
-                await this.firebaseService.createDualStudent(s);
+                await this.supabaseService.createDualStudent(s);
                 imported++;
             } catch (e) {
                 console.error("Error importing", s.name, e);
@@ -1471,14 +1471,14 @@ export class DualModule {
 
                 if (type === 'company') {
                     // 1. Company Interactions
-                    const companyInteractions = await this.firebaseService.getDualInteractions(entity.id);
+                    const companyInteractions = await this.supabaseService.getDualInteractions(entity.id);
                     companyInteractions.forEach(i => i._sourceLabel = 'Empresa (Prospección)');
 
                     // 2. Student Interactions
                     const assignedStudents = this.students.filter(s => s.companyId === entity.id);
 
                     const studentPromises = assignedStudents.map(async s => {
-                        const sInts = await this.firebaseService.getDualInteractions(s.id);
+                        const sInts = await this.supabaseService.getDualInteractions(s.id);
                         sInts.forEach(i => {
                             i._sourceLabel = `Alumno: ${s.name}`;
                             i._isStudent = true;
@@ -1491,7 +1491,7 @@ export class DualModule {
 
                     interactions = [...companyInteractions, ...allStudentInteractions];
                 } else {
-                    interactions = await this.firebaseService.getDualInteractions(entity.id);
+                    interactions = await this.supabaseService.getDualInteractions(entity.id);
                 }
 
                 // Sort by date desc
@@ -1546,7 +1546,7 @@ export class DualModule {
                 listContainer.querySelectorAll('.btn-del-int').forEach(btn => {
                     btn.addEventListener('click', async () => {
                         if (confirm('¿Borrar seguimiento?')) {
-                            await this.firebaseService.deleteDualInteraction(btn.dataset.id);
+                            await this.supabaseService.deleteDualInteraction(btn.dataset.id);
                             loadInteractions();
                         }
                     });
@@ -1578,7 +1578,7 @@ export class DualModule {
             };
 
             try {
-                await this.firebaseService.addDualInteraction(data);
+                await this.supabaseService.addDualInteraction(data);
                 document.getElementById('int-notes').value = '';
                 loadInteractions();
             } catch (error) {
@@ -1595,11 +1595,11 @@ export class DualModule {
         try {
             // Ensure we have users, students, and companies loaded
             if (this.users.length === 0) {
-                const allUsers = await this.firebaseService.getAllUsers();
+                const allUsers = await this.supabaseService.getAllUsers();
                 this.users = allUsers.filter(u => (u.roles || []).includes('equipo_dual'));
             }
-            if (this.students.length === 0) this.students = await this.firebaseService.getDualStudents(null);
-            if (this.companies.length === 0) this.companies = await this.firebaseService.getCompanies();
+            if (this.students.length === 0) this.students = await this.supabaseService.getDualStudents(null);
+            if (this.companies.length === 0) this.companies = await this.supabaseService.getCompanies();
 
             this.renderDualTeamTable();
         } catch (error) {
@@ -1822,7 +1822,7 @@ export class DualModule {
             const h2 = parseInt(document.getElementById('hours-2').value) || 0;
 
             try {
-                await this.firebaseService.updateUser(user.uid, {
+                await this.supabaseService.updateUser(user.uid, {
                     dualHours1: h1,
                     dualHours2: h2
                 });
@@ -1844,7 +1844,7 @@ export class DualModule {
 
         // Load History
         try {
-            const interactions = await this.firebaseService.getInteractionsByAuthor(user.uid);
+            const interactions = await this.supabaseService.getInteractionsByAuthor(user.uid);
 
             const historyContainer = document.getElementById('history-container');
             if (interactions.length === 0) {

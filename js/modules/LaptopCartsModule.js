@@ -2,9 +2,9 @@ import { UIHelpers } from '../UIHelpers.js';
 import { Calendar } from '../Calendar.js';
 
 export class LaptopCartsModule {
-    constructor(container, firebaseService, user, userRoles, isAdmin) {
+    constructor(container, supabaseService, user, userRoles, isAdmin) {
         this.container = container;
-        this.firebaseService = firebaseService;
+        this.supabaseService = supabaseService;
         this.user = user;
         this.userRoles = userRoles;
         this.isAdmin = isAdmin;
@@ -99,9 +99,9 @@ export class LaptopCartsModule {
             monthLabel: document.getElementById('carts-month-label'),
             prevBtn: document.getElementById('carts-prev-month'),
             nextBtn: document.getElementById('carts-next-month')
-        }, this.firebaseService, this.user, this.userRoles, {
+        }, this.supabaseService, this.user, this.userRoles, {
             fetchData: async (year, month) => {
-                return await this.firebaseService.getMonthAvailability(year, month);
+                return await this.supabaseService.getMonthAvailability(year, month);
             },
             onDateSelect: (dateStr) => {
                 this.currentDate = new Date(dateStr);
@@ -163,9 +163,9 @@ export class LaptopCartsModule {
 
             // Load carts and reservations locally
             // Ideally should check cache or verify if carts list changed
-            this.carts = await this.firebaseService.getCarts();
+            this.carts = await this.supabaseService.getCarts();
             this.carts.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-            this.reservations = await this.firebaseService.getCartReservations(dateStr);
+            this.reservations = await this.supabaseService.getCartReservations(dateStr);
             this.renderGrid(container);
         } catch (error) {
             console.error(error);
@@ -356,7 +356,7 @@ export class LaptopCartsModule {
 
     async processSingleReservation(dateStr, slotIndex, slotLabel, cartId, cartName, comment = '') {
         try {
-            await this.firebaseService.reserveCart(
+            await this.supabaseService.reserveCart(
                 dateStr,
                 slotIndex,
                 slotLabel,
@@ -410,7 +410,7 @@ export class LaptopCartsModule {
             const rangeStart = targetDates[0];
             const rangeEnd = targetDates[targetDates.length - 1];
 
-            const existingReservations = await this.firebaseService.getCartReservationsInRange(rangeStart, rangeEnd);
+            const existingReservations = await this.supabaseService.getCartReservationsInRange(rangeStart, rangeEnd);
 
             const conflicts = [];
 
@@ -434,7 +434,7 @@ export class LaptopCartsModule {
             UIHelpers.showToast('Realizando reservas...', 'info');
 
             const promises = targetDates.map(date =>
-                this.firebaseService.reserveCart(
+                this.supabaseService.reserveCart(
                     date,
                     slotIndex,
                     slotLabel,
@@ -505,13 +505,13 @@ export class LaptopCartsModule {
 
             try {
                 if (type === 'single') {
-                    await this.firebaseService.cancelCartReservation(reservationId);
+                    await this.supabaseService.cancelCartReservation(reservationId);
                     UIHelpers.showToast('Reserva cancelada', 'success');
                 } else {
                     if (!confirm('¿Estás seguro de que quieres borrar TODAS las reservas futuras de esta serie?')) return;
 
                     UIHelpers.showToast('Buscando reservas...', 'info');
-                    const futureReservations = await this.firebaseService.getReservationsForCartInRange(
+                    const futureReservations = await this.supabaseService.getReservationsForCartInRange(
                         reservation.cartId,
                         reservation.slotIndex,
                         reservation.date,
@@ -524,7 +524,7 @@ export class LaptopCartsModule {
                     }
 
                     UIHelpers.showToast(`Eliminando ${futureReservations.length} reservas...`, 'info');
-                    const promises = futureReservations.map(r => this.firebaseService.cancelCartReservation(r.id));
+                    const promises = futureReservations.map(r => this.supabaseService.cancelCartReservation(r.id));
                     await Promise.all(promises);
                     UIHelpers.showToast('Reservas eliminadas correctamente', 'success');
                 }
@@ -543,7 +543,7 @@ export class LaptopCartsModule {
     async loadInventoryView() {
         const container = document.getElementById('carts-list-container');
         try {
-            this.carts = await this.firebaseService.getCarts();
+            this.carts = await this.supabaseService.getCarts();
             this.carts.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
             if (this.carts.length === 0) {
@@ -591,7 +591,7 @@ export class LaptopCartsModule {
     async deleteCart(cartId) {
         if (!confirm('¿Eliminar este carro? Se perderán las reservas históricas asociadas (si no se borraron antes).')) return;
         try {
-            await this.firebaseService.deleteCart(cartId);
+            await this.supabaseService.deleteCart(cartId);
             UIHelpers.showToast('Carro eliminado', 'success');
             this.loadInventoryView();
         } catch (e) {
@@ -652,9 +652,9 @@ export class LaptopCartsModule {
 
             try {
                 if (cart) {
-                    await this.firebaseService.updateCart(cart.id, { name, location, description, active });
+                    await this.supabaseService.updateCart(cart.id, { name, location, description, active });
                 } else {
-                    await this.firebaseService.createCart({ name, location, description, active });
+                    await this.supabaseService.createCart({ name, location, description, active });
                 }
                 UIHelpers.showToast('Guardado correctamente', 'success');
                 bsModal.hide();
