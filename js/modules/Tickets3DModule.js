@@ -253,12 +253,16 @@ export class Tickets3DModule {
                 const userData = users.find(u => u.uid === this.user.uid);
                 const userDepartment = userData?.department || 'Sin departamento';
 
-                const result = await this.supabaseService.createTicket('3d', {
+                const result = await this.supabaseService.createTicket({
+                    type: '3d',
                     title,
                     description,
                     priority,
-                    stlUrl
-                }, this.user.uid, this.user.displayName || this.user.email.split('@')[0], userDepartment);
+                    stlUrl,
+                    requestedBy: this.user.uid,
+                    requestedByName: this.user.displayName || this.user.email.split('@')[0],
+                    requestedByDepartment: userDepartment
+                });
 
                 UIHelpers.showToast(`Petición ${result.ticketNumber} creada correctamente`, 'success');
                 bsModal.hide();

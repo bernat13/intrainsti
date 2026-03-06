@@ -107,13 +107,18 @@ async function handlePostLogin(user) {
             }
         }
 
-        // 1. Get user's institutes
-        const institutes = await supabaseService.getMyInstitutes(user.id);
+        // 1. Get user's institutes (with retry for latency)
+        let institutes = [];
+        for (let i = 0; i < 3; i++) {
+            institutes = await supabaseService.getMyInstitutes(user.id);
+            if (institutes.length > 0) break;
+            await new Promise(r => setTimeout(r, 1000)); // Wait 1s
+        }
 
         if (institutes.length === 0) {
             // No institutes found -> Show Selection/Registration (Registration mainly)
             showSelection();
-            if (instituteList) instituteList.innerHTML = '<div class="alert alert-warning">No perteneces a ningún instituto registrado. Puedes registrar uno nuevo.</div>';
+            if (instituteList) instituteList.innerHTML = '<div class="alert alert-warning">No perteneces a ningún instituto registrado. Puedes registrar uno nuevo o esperar a que se procese tu invitación.</div>';
         } else {
             // ALWAYS show selection list, even if only 1
             renderInstituteList(institutes);

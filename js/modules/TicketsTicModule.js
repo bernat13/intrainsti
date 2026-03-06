@@ -500,12 +500,16 @@ export class TicketsTicModule {
                 const userData = users.find(u => u.uid === this.user.uid);
                 const userDepartment = userData?.department || 'Sin departamento';
 
-                const result = await this.supabaseService.createTicket('tic', {
+                const result = await this.supabaseService.createTicket({
+                    type: 'tic',
                     title,
                     description,
                     priority,
-                    department: userDepartment
-                }, this.user.uid, this.user.displayName || this.user.email.split('@')[0], userDepartment);
+                    department: userDepartment,
+                    requestedBy: this.user.uid,
+                    requestedByName: this.user.displayName || this.user.email.split('@')[0],
+                    requestedByDepartment: userDepartment
+                });
 
                 UIHelpers.showToast(`Incidencia ${result.ticketNumber} creada correctamente`, 'success');
                 bsModal.hide();

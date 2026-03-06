@@ -8,7 +8,8 @@ export class LaptopCartsModule {
         this.user = user;
         this.userRoles = userRoles;
         this.isAdmin = isAdmin;
-        this.isTic = userRoles.includes('equipo_tic') || isAdmin;
+        // Restrict management to TIC team or global admin, excluding 'director' (who is isAdmin but not necessarily TIC)
+        this.isTic = userRoles.includes('equipo_tic') || userRoles.includes('admin');
 
         this.currentDate = new Date();
 

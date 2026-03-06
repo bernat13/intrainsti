@@ -17,6 +17,8 @@ import { MyDepartmentModule } from './modules/MyDepartmentModule.js';
 import { HelpModule } from './modules/HelpModule.js';
 import { DualModule } from './modules/DualModule.js';
 import { SuperadminModule } from './modules/SuperadminModule.js';
+import { ProfileModule } from './modules/ProfileModule.js';
+import { InstituteSettingsModule } from './modules/InstituteSettingsModule.js';
 
 class DashboardApp {
     constructor() {
@@ -355,6 +357,10 @@ class DashboardApp {
             this.router.register('/departamentos', () => {
                 return new DepartmentsModule(mainContent, this.supabaseService, this.user, this.isAdmin);
             });
+
+            this.router.register('/settings', () => {
+                return new InstituteSettingsModule(mainContent, this.supabaseService, this.user, this.isAdmin);
+            });
         }
 
         this.router.register('/superadmin', async () => {
@@ -387,6 +393,23 @@ class DashboardApp {
         // Logout button
         document.getElementById('logout-btn').addEventListener('click', () => {
             this.supabaseService.logout();
+        });
+
+        // Profile & Navigation
+        const profileModule = new ProfileModule(this.supabaseService, this.user);
+
+        const btnProfile = document.getElementById('btn-my-profile');
+        if (btnProfile) btnProfile.addEventListener('click', () => profileModule.showProfileModal());
+
+        const btnAbout = document.getElementById('btn-about');
+        if (btnAbout) btnAbout.addEventListener('click', () => profileModule.showAboutModal());
+
+        const btnSwitch = document.getElementById('btn-switch-institute');
+        if (btnSwitch) btnSwitch.addEventListener('click', async () => {
+            if (await UIHelpers.confirm('¿Quieres volver a la selección de instituto? Esto cerrará la sesión actual en este centro.', 'Cambiar Instituto')) {
+                localStorage.removeItem('selectedInstituteId');
+                window.location.href = 'index.html';
+            }
         });
 
         // Sidebar Toggles

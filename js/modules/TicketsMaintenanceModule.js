@@ -677,7 +677,8 @@ export class TicketsMaintenanceModule {
             }
 
             try {
-                const result = await this.supabaseService.createTicket('maintenance', {
+                const result = await this.supabaseService.createTicket({
+                    type: 'maintenance',
                     title,
                     description,
                     location,
@@ -685,8 +686,11 @@ export class TicketsMaintenanceModule {
                     // Maintenance tickets start as 'pendiente_validacion' by default in createTicket service,
                     // but we can enforce it or assume service handles it. Service handles it.
                     // IMPORTANT: 'department' field is used for filtering.
-                    department: targetUserDept || 'Sin departamento'
-                }, targetUserId, targetUserName, targetUserDept || 'Sin departamento');
+                    department: targetUserDept || 'Sin departamento',
+                    requestedBy: targetUserId,
+                    requestedByName: targetUserName,
+                    requestedByDepartment: targetUserDept || 'Sin departamento'
+                });
 
                 UIHelpers.showToast(`Petición ${result.ticketNumber} creada correctamente`, 'success');
                 bsModal.hide();

@@ -4,21 +4,40 @@ import supabaseConfig from './supabase-config.js';
 
 export class SupabaseService {
     constructor() {
-        this.supabase = createClient(supabaseConfig.url, supabaseConfig.key);
+        this.supabase = createClient(supabaseConfig.url, supabaseConfig.key, {
+            auth: {
+                flowType: 'pkce',
+                detectSessionInUrl: true,
+                persistSession: true,
+                autoRefreshToken: true
+            }
+        });
         this.currentInstitute = null;
     }
 
     // ==================== AUTHENTICATION ====================
 
     async login() {
+        // Use current URL origin + path to ensure we return to the app
+        const redirectTo = window.location.origin + window.location.pathname;
+
         const { data, error } = await this.supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: window.location.origin
+                redirectTo: redirectTo,
+                queryParams: {
+                    access_type: 'offline', // Request refresh token
+                    prompt: 'consent' // Force consent prompt to avoid some loop issues
+                }
             }
         });
         if (error) throw error;
-        return data; // Redirects usually
+
+        // In PKCE flow, data.url is returned and we might need to redirect manually if the SDK doesn't
+        // But usually SDK handles it. Just in case:
+        // if (data.url) window.location.href = data.url; 
+
+        return data;
     }
 
     async logout() {
@@ -152,8 +171,41 @@ export class SupabaseService {
     }
 
     async getModuleConfig() {
-        // For now, return a default config where everything is active.
-        // In future, this could be fetched from 'institute_settings' or 'institutes.config'
+        if (!this.currentInstitute) {
+            // Fallback for when no institute is selected yet (e.g. initial load before selection)
+            return {
+                calendario: 'active',
+                anuncios: 'active',
+                tickets_tic: 'active',
+                tickets_maintenance: 'active',
+                tickets_3d: 'active',
+                dual: 'active',
+                sum: 'active',
+                carts: 'active'
+            };
+        }
+
+        const { data, error } = await this.supabase
+            .from('institutes')
+            .select('module_config')
+            .eq('id', this.currentInstitute.id)
+            .single();
+
+        if (error) {
+            console.warn("Error fetching module config, using defaults:", error);
+            return {
+                calendario: 'active',
+                anuncios: 'active',
+                tickets_tic: 'active',
+                tickets_maintenance: 'active',
+                tickets_3d: 'active',
+                dual: 'active',
+                sum: 'active',
+                carts: 'active'
+            };
+        }
+
+        // Return config merged with defaults to ensure all keys exist
         return {
             calendario: 'active',
             anuncios: 'active',
@@ -162,8 +214,43 @@ export class SupabaseService {
             tickets_3d: 'active',
             dual: 'active',
             sum: 'active',
-            carts: 'active'
+            carts: 'active',
+            ...(data.module_config || {})
         };
+    }
+
+    async updateModuleConfig(config) {
+        if (!this.currentInstitute) throw new Error("No institute selected");
+
+        const { error } = await this.supabase
+            .from('institutes')
+            .update({ module_config: config })
+            .eq('id', this.currentInstitute.id);
+
+        if (error) throw error;
+    }
+
+    async updateInstituteDetails(details) {
+        if (!this.currentInstitute) throw new Error("No institute selected");
+
+        // Filter allowed fields
+        const updates = {
+            name: details.name,
+            address: details.address,
+            website: details.website,
+            time_slots: details.timeSlots
+        };
+
+        const { error } = await this.supabase
+            .from('institutes')
+            .update(updates)
+            .eq('id', this.currentInstitute.id);
+
+        if (error) throw error;
+
+        // Update local cache
+        this.currentInstitute = { ...this.currentInstitute, ...updates };
+        // Ideally we should reload from DB to be sure, but for UI responsiveness this helps
     }
 
     async getInstituteMember(userId, instituteId) {
@@ -215,7 +302,8 @@ export class SupabaseService {
                 *,
                 user_profiles (
                     email,
-                    display_name
+                    display_name,
+                    last_login
                 )
             `)
             .eq('institute_id', this.currentInstitute.id);
@@ -227,8 +315,10 @@ export class SupabaseService {
             uid: m.user_id,
             email: m.user_profiles?.email,
             displayName: m.user_profiles?.display_name,
+            lastLogin: m.user_profiles?.last_login,
             roles: m.roles,
             department: m.department,
+            isAdmin: m.roles && m.roles.includes('admin'),
             ...m
         }));
     }
@@ -240,6 +330,7 @@ export class SupabaseService {
         if (!this.currentInstitute) throw new Error("No institute selected");
         return query.eq('institute_id', this.currentInstitute.id);
     }
+
 
     async getTickets(type, userUid = null, userRoles = null) {
         // type: 'tic', 'maintenance', '3d'
@@ -275,7 +366,7 @@ export class SupabaseService {
 
         return filteredData.map(t => ({
             ...t,
-            ticketNumber: t.number, // Map snake_case to camelCase
+            ticketNumber: `${t.type.toUpperCase()}-${t.ticket_number}`, // Map snake_case to camelCase and format
             requestedBy: t.requested_by,
             requestedByName: t.requested_by_name,
             requestedByDepartment: t.requested_by_department,
@@ -294,16 +385,11 @@ export class SupabaseService {
     async createTicket(ticketData) {
         if (!this.currentInstitute) throw new Error("No institute selected");
 
-        // Generate number? Or let DB trigger do it? 
-        // For now, let's assume DB trigger or we generate simpler one.
-        // Let's generate a simple timestamp-based one or random if we don't have counters table yet.
-        const ticketNumber = `${ticketData.type.toUpperCase()}-${Date.now().toString().slice(-6)}`;
-
         const { data, error } = await this.supabase
             .from('tickets')
             .insert([{
                 ...ticketData,
-                number: ticketNumber,
+                // number: ticketNumber, // REMOVED: DB handles serial ticket_number
                 requested_by: ticketData.requestedBy, // Map camelCase to snake_case
                 institute_id: this.currentInstitute.id,
                 created_at: new Date()
@@ -311,7 +397,12 @@ export class SupabaseService {
             .select();
 
         if (error) throw error;
-        return data[0];
+
+        const createdTicket = data[0];
+        return {
+            ...createdTicket,
+            ticketNumber: `${createdTicket.type.toUpperCase()}-${createdTicket.ticket_number}`
+        };
     }
 
     async getAnnouncements(userRoles = null) {
@@ -383,6 +474,102 @@ export class SupabaseService {
             .eq('is_superadmin', true);
         if (error) throw error;
         return data;
+    }
+
+    async getInstituteMembersAdmin(instituteId) {
+        const { data, error } = await this.supabase
+            .from('institute_members')
+            .select(`
+                *,
+                user_profiles (
+                    email,
+                    display_name,
+                    photo_url
+                )
+            `)
+            .eq('institute_id', instituteId);
+
+        if (error) throw error;
+        return data.map(m => ({
+            uid: m.user_id,
+            email: m.user_profiles?.email,
+            displayName: m.user_profiles?.display_name,
+            photoUrl: m.user_profiles?.photo_url,
+            roles: m.roles || [],
+            isAdmin: m.roles && m.roles.includes('admin'),
+            ...m
+        }));
+    }
+
+    async updateMemberRolesAdmin(instituteId, uid, roles) {
+        const { error } = await this.supabase
+            .from('institute_members')
+            .update({ roles: roles })
+            .eq('institute_id', instituteId)
+            .eq('user_id', uid);
+        if (error) throw error;
+    }
+
+    async getLoginLogs(limit = 20, lastCursor = null) {
+        if (!this.currentInstitute) return { logs: [], lastVisible: null };
+
+        let query = this.supabase
+            .from('login_logs')
+            .select('*')
+            .eq('institute_id', this.currentInstitute.id)
+            .order('timestamp', { ascending: false })
+            .limit(limit);
+
+        if (lastCursor) {
+            query = query.lt('timestamp', lastCursor.timestamp);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        const lastVisible = data.length > 0 ? data[data.length - 1] : null;
+        return { logs: data, lastVisible };
+    }
+
+    async getGlobalLoginLogs(limit = 20, lastCursor = null) {
+        // Superadmin only (RLS should handle it)
+        let query = this.supabase
+            .from('login_logs')
+            .select('*, institutes(name)') // Join to see institute name
+            .order('timestamp', { ascending: false })
+            .limit(limit);
+
+        if (lastCursor) {
+            query = query.lt('timestamp', lastCursor.timestamp);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        const lastVisible = data.length > 0 ? data[data.length - 1] : null;
+        return { logs: data, lastVisible };
+    }
+
+    async logActivity(type, reason) {
+        if (!this.currentInstitute) return;
+        const user = await this.getCurrentUser();
+        if (!user) return;
+
+        const profile = await this.getProfile(user.id);
+
+        try {
+            await this.supabase.from('login_logs').insert([{
+                user_id: user.id,
+                email: user.email,
+                name: profile?.display_name || user.email,
+                type: type,
+                reason: reason,
+                institute_id: this.currentInstitute.id,
+                timestamp: new Date()
+            }]);
+        } catch (e) {
+            console.warn("Failed to log activity", e);
+        }
     }
 
     async setSuperAdmin(email, isSuper) {
@@ -476,6 +663,84 @@ export class SupabaseService {
             return;
         }
         await this.updateUserRoles(uid, roles);
+    }
+
+    async getProfileByEmail(email) {
+        const { data, error } = await this.supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('email', email)
+            .maybeSingle();
+        if (error) throw error;
+        return data;
+    }
+
+    async addInstituteMember(uid, roles = [], department = null) {
+        if (!this.currentInstitute) throw new Error("No institute selected");
+        const { error } = await this.supabase
+            .from('institute_members')
+            .insert({
+                institute_id: this.currentInstitute.id,
+                user_id: uid,
+                roles: roles,
+                department: department,
+                status: 'active'
+            });
+        if (error) {
+            if (error.code === '23505') throw new Error("El usuario ya es miembro del instituto");
+            throw error;
+        }
+    }
+
+    async removeInstituteMember(uid) {
+        if (!this.currentInstitute) throw new Error("No institute selected");
+        const { error } = await this.supabase
+            .from('institute_members')
+            .delete()
+            .eq('institute_id', this.currentInstitute.id)
+            .eq('user_id', uid);
+        if (error) throw error;
+    }
+
+    // ==================== PENDING MEMBERSHIPS ====================
+
+    async addPendingMembership(email, roles = [], department = null) {
+        if (!this.currentInstitute) throw new Error("No institute selected");
+
+        // Upsert to handle re-invites or updates to roles/dept
+        const { error } = await this.supabase
+            .from('pending_memberships')
+            .upsert({
+                institute_id: this.currentInstitute.id,
+                email: email,
+                roles: roles,
+                department: department,
+                created_at: new Date()
+            }, { onConflict: 'institute_id, email' });
+
+        if (error) throw error;
+    }
+
+    async getPendingMemberships() {
+        if (!this.currentInstitute) return [];
+
+        const { data, error } = await this.supabase
+            .from('pending_memberships')
+            .select('*')
+            .eq('institute_id', this.currentInstitute.id)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return data;
+    }
+
+    async removePendingMembership(id) {
+        if (!this.currentInstitute) throw new Error("No institute selected");
+        const { error } = await this.supabase
+            .from('pending_memberships')
+            .delete()
+            .eq('id', id);
+        if (error) throw error;
     }
 
     // ==================== TICKETS & ANNOUNCEMENTS UPDATES ====================
